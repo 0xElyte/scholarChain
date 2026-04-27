@@ -5,11 +5,13 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {MultiSig} from "./MultiSig.sol";
 
+import { IERC20MultiSig } from "./Interfaces/IERC20MultiSig.sol";
+
 import {
     TreasuryMultisigErrors
 } from "./Types/TreasuryMultisigTypes.sol";
 
-abstract contract ERC20MultiSig is MultiSig {
+abstract contract ERC20MultiSig is MultiSig, IERC20MultiSig {
     IERC20 private immutable token;
 
     constructor(

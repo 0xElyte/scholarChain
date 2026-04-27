@@ -11,7 +11,9 @@ import {
     TreasuryMultisigStructs
 } from "./Types/TreasuryMultisigTypes.sol";
 
-abstract contract MultiSig is ReentrancyGuard {
+import { IMultiSig } from "./Interfaces/IMultiSig.sol";
+
+abstract contract MultiSig is ReentrancyGuard, IMultiSig {
     address[] internal signers;
     uint256 private requiredSignatures;
 
