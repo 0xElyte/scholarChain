@@ -21,7 +21,7 @@ library TreasuryMultisigEvents {
     event SignerAdded(address indexed signer);
     event SignerRemoved(address indexed signer);
     event RequiredSignaturesChanged(uint256 newThreshold);
-    event ProposalCreated(uint256 indexed proposalId, address indexed proposer, address indexed to, uint256 value, bytes data);
+    event ProposalCreated(uint256 indexed proposalId, address indexed proposer, address indexed to, bytes data);
     event ProposalSignatureRevoked(uint256 indexed proposalId, address indexed signer);
     event ProposalExecuted(uint256 indexed proposalId);
     event ProposalSigned(uint256 indexed proposalId, address indexed signer);
@@ -29,13 +29,23 @@ library TreasuryMultisigEvents {
 
 library TreasuryMultisigStructs {
     struct Proposal {
+        uint256 id;
         address by;
         address to;
-        uint256 value;
         bytes data;
         bool executed;
         uint256 signatureCount;
         mapping(address => bool) signedSigners;
+        address[] signers;
+    }
+
+    struct ProposalView {
+        uint256 id;
+        address by;
+        address to;
+        bytes data;
+        bool executed;
+        uint256 signatureCount;
         address[] signers;
     }
 }
