@@ -301,3 +301,46 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         }
         emit VoteCast(msg.sender, benefactor, approve);
     }
+
+    // Callable by anyone after reviewEnd — sends 10% fee to treasury, sets per-winner share
+    function enterDistributionPhase() external nonReentrant whenNotPaused {
+        if (_state() != PoolState.DISTRIBUTING)
+            revert InvalidState("DISTRIBUTING", _stateLabel(_state()));
+        if (distributionEntered) revert DistributionAlreadyEntered();
+
+        distributionEntered = true;
+
+        uint256 total     = totalDeposited;
+        uint256 fee       = (total * TREASURY_FEE_BPS) / 10_000;
+        uint256 remaining = total - fee;
+
+        usdt.safeTransfer(treasury, fee);
+        emit ProtocolFeeTransferred(treasury, fee);
+
+        if (winners.length == 0) {
+            // zero-winner path — refund 90% proportionally to donors
+            _refundDonorsProportional(remaining, total);
+            _zeroDonorRefundDone = true;
+            distributionAmount   = 0;
+            emit DistributionPhaseEntered(0, 0);
+        } else {
+            // floor division — dust swept to treasury on pool close
+            distributionAmount = remaining / winners.length;
+            emit DistributionPhaseEntered(winners.length, distributionAmount);
+        }
+    }
+
+    function _refundDonorsProportional(uint256 refundPool, uint256 totalDep) internal {
+        uint256 len = donors.length;
+        for (uint256 i = 0; i < len; i++) {
+            address donor     = donors[i];
+            uint256 share     = donations[donor];
+            if (share == 0) continue;
+            uint256 refundAmt = (share * refundPool) / totalDep;
+            donations[donor]  = 0; // CEI — zero before transfer
+            if (refundAmt > 0) {
+                usdt.safeTransfer(donor, refundAmt);
+                emit RefundClaimed(donor, refundAmt);
+            }
+        }
+    }
