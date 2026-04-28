@@ -262,3 +262,42 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         isCancelled = true;
         emit PoolCancelled();
     }
+
+    // One proposal per benefactor, ACTIVE state only
+    function submitProposal(bytes32 docCID, address payoutAddr)
+        external whenNotPaused inState(PoolState.ACTIVE)
+    {
+        if (proposals[msg.sender].exists) revert AlreadySubmitted();
+        if (docCID == bytes32(0))         revert InvalidAmount();
+        if (payoutAddr == address(0))     revert InvalidAddress();
+        proposals[msg.sender] = Proposal({
+            documentCID:   docCID,
+            payoutAddress: payoutAddr,
+            submittedAt:   block.timestamp,
+            exists:        true
+        });
+        emit ProposalSubmitted(msg.sender, docCID);
+    }
+
+    // One vote per signer per benefactor — quorum = ceil(signers.length * 70 / 100)
+    function vote(address benefactor, bool approve)
+        external whenNotPaused onlySignerRole inState(PoolState.ACTIVE)
+    {
+        if (!proposals[benefactor].exists) revert InvalidAddress();
+        if (votes[msg.sender][benefactor]) revert AlreadyVoted();
+        if (isWinner[benefactor])          revert AlreadyWon();
+
+        votes[msg.sender][benefactor] = true;
+
+        if (approve) {
+            approvalCount[benefactor]++;
+            // ceiling division to avoid floating point
+            uint256 quorum = (signers.length * 70 + 99) / 100;
+            if (approvalCount[benefactor] >= quorum) {
+                isWinner[benefactor] = true;
+                winners.push(benefactor);
+                emit BenefactorApproved(benefactor);
+            }
+        }
+        emit VoteCast(msg.sender, benefactor, approve);
+    }
