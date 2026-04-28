@@ -88,3 +88,50 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
     address[] public winners;
     mapping(address => bool) public isWinner;
     mapping(address => bool) public hasClaimed;
+
+     // --- Events ---
+    event DonationReceived(address indexed donor, uint256 amount);
+    event CriteriaUpdated(bytes32 indexed newCID);
+    event SignerAdded(address indexed signer);
+    event PoolCancelled();
+    event ProposalSubmitted(address indexed benefactor, bytes32 indexed documentCID);
+    event VoteCast(address indexed signer, address indexed benefactor, bool approved);
+    event BenefactorApproved(address indexed benefactor);
+    event DistributionPhaseEntered(uint256 totalWinners, uint256 perWinnerAmount);
+    event ProtocolFeeTransferred(address indexed treasury, uint256 amount);
+    event GrantClaimed(address indexed winner, address indexed payoutAddress, uint256 amount);
+    event RefundClaimed(address indexed donor, uint256 amount);
+    event PoolClosed();
+
+    // --- Pool lifecycle states (derived from timestamp, never stored) ---
+    enum PoolState { PENDING, ACTIVE, REVIEW, DISTRIBUTING, CLOSED, CANCELLED }
+
+    // State is derived from block.timestamp — no mutable state variable
+    function _state() internal view returns (PoolState) {
+        if (isCancelled)                        return PoolState.CANCELLED;
+        if (block.timestamp < submissionStart)  return PoolState.PENDING;
+        if (block.timestamp < submissionEnd)    return PoolState.ACTIVE;
+        if (block.timestamp < reviewEnd)        return PoolState.REVIEW;
+        if (_zeroDonorRefundDone)               return PoolState.CLOSED;
+        if (winners.length > 0) {
+            bool allClaimed = true;
+            for (uint256 i = 0; i < winners.length; i++) {
+                if (!hasClaimed[winners[i]]) { allClaimed = false; break; }
+            }
+            if (allClaimed) return PoolState.CLOSED;
+        }
+        return PoolState.DISTRIBUTING;
+    }
+
+    function currentState() external view returns (string memory) {
+        return _stateLabel(_state());
+    }
+
+    function _stateLabel(PoolState s) internal pure returns (string memory) {
+        if (s == PoolState.PENDING)      return "PENDING";
+        if (s == PoolState.ACTIVE)       return "ACTIVE";
+        if (s == PoolState.REVIEW)       return "REVIEW";
+        if (s == PoolState.DISTRIBUTING) return "DISTRIBUTING";
+        if (s == PoolState.CLOSED)       return "CLOSED";
+        return "CANCELLED";
+    }
