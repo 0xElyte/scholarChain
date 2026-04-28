@@ -344,3 +344,41 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
             }
         }
     }
+
+      // Pull payment — winner receives funds at their declared payoutAddress
+    // SBT minted AFTER transfer to prevent ERC-721 callback reentrancy
+    function claimGrant() external nonReentrant whenNotPaused inState(PoolState.DISTRIBUTING) {
+        if (!isWinner[msg.sender])  revert NotAWinner();
+        if (hasClaimed[msg.sender]) revert AlreadyClaimed();
+
+        hasClaimed[msg.sender] = true; // CEI — mark before external calls
+
+        address payoutAddr = proposals[msg.sender].payoutAddress;
+        uint256 amount     = distributionAmount;
+
+        usdt.safeTransfer(payoutAddr, amount);
+        emit GrantClaimed(msg.sender, payoutAddr, amount);
+
+        sbtContract.mint(payoutAddr, address(this), poolName, amount, payoutAddr);
+
+        // sweep dust to treasury and close pool when all winners claimed
+        bool allDone = true;
+        for (uint256 i = 0; i < winners.length; i++) {
+            if (!hasClaimed[winners[i]]) { allDone = false; break; }
+        }
+        if (allDone) {
+            uint256 dust = usdt.balanceOf(address(this));
+            if (dust > 0) usdt.safeTransfer(treasury, dust);
+            emit PoolClosed();
+        }
+    }
+
+    // Pull refund for cancelled pools — only path for donors, no push loop
+    function claimRefund() external nonReentrant whenNotPaused {
+        if (!isCancelled)               revert PoolNotCancelled();
+        if (donations[msg.sender] == 0) revert NotADonor();
+        uint256 amount        = donations[msg.sender];
+        donations[msg.sender] = 0; // CEI
+        usdt.safeTransfer(msg.sender, amount);
+        emit RefundClaimed(msg.sender, amount);
+    }
