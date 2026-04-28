@@ -382,3 +382,25 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         usdt.safeTransfer(msg.sender, amount);
         emit RefundClaimed(msg.sender, amount);
     }
+
+     // --- View helpers for frontend (Bamz) and integration contract (Dolapo) ---
+    function getSigners()  external view returns (address[] memory) { return signers; }
+    function getWinners()  external view returns (address[] memory) { return winners; }
+    function getDonors()   external view returns (address[] memory) { return donors; }
+
+    function quorumThreshold() external view returns (uint256) {
+        return (signers.length * 70 + 99) / 100;
+    }
+
+    function getProposal(address benefactor) external view returns (Proposal memory) {
+        return proposals[benefactor];
+    }
+
+    function getApprovalCount(address benefactor) external view returns (uint256) {
+        return approvalCount[benefactor];
+    }
+
+    function hasVoted(address signer, address benefactor) external view returns (bool) {
+        return votes[signer][benefactor];
+    }
+}
