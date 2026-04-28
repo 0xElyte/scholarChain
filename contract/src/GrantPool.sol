@@ -233,3 +233,32 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         donations[donor] += amount;
         totalDeposited   += amount;
     }
+
+    // Update criteria CID before submission opens
+    function editCriteria(bytes32 newCID) external onlyCreator inState(PoolState.PENDING) {
+        if (newCID == bytes32(0)) revert InvalidAmount();
+        criteriaMetadataCID = newCID;
+        emit CriteriaUpdated(newCID);
+    }
+
+    // Signer list locks permanently at submissionStart
+    function addSigner(address signer) external onlyCreator {
+        if (block.timestamp >= signerLockedAt) revert SignerListLocked();
+        if (signer == address(0)) revert InvalidAddress();
+        _addSignerInternal(signer);
+    }
+
+    function _addSignerInternal(address signer) internal {
+        if (signer == address(0)) revert InvalidAddress();
+        if (isSigner[signer]) return; // idempotent
+        isSigner[signer] = true;
+        signers.push(signer);
+        _grantRole(SIGNER_ROLE, signer);
+        emit SignerAdded(signer);
+    }
+
+    // Cancel only allowed before submission opens — protects benefactors
+    function cancelPool() external onlyCreator nonReentrant inState(PoolState.PENDING) {
+        isCancelled = true;
+        emit PoolCancelled();
+    }
