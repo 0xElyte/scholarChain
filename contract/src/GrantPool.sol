@@ -134,4 +134,71 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         if (s == PoolState.DISTRIBUTING) return "DISTRIBUTING";
         if (s == PoolState.CLOSED)       return "CLOSED";
         return "CANCELLED";
+    
+    // --- Access control modifiers ---
+    modifier onlyCreator() {
+        if (msg.sender != creator) revert Unauthorized();
+        _;
     }
+
+    modifier onlySignerRole() {
+        if (!isSigner[msg.sender]) revert Unauthorized();
+        _;
+    }
+
+    modifier inState(PoolState required) {
+        PoolState current = _state();
+        if (current != required)
+            revert InvalidState(_stateLabel(required), _stateLabel(current));
+        _;
+    }
+
+    // Deployed by ScholarChainFactory (Raphael) — receives treasuryFeeBps from factory constant
+    constructor(
+        string   memory _poolName,
+        bytes32         _criteriaMetadataCID,
+        uint256         _submissionStart,
+        uint256         _submissionEnd,
+        uint256         _reviewDuration,
+        address[] memory _initialSigners,
+        address         _usdtTokenAddress,
+        address         _treasury,
+        uint256         _treasuryFeeBps,
+        address         _sbtContract,
+        address         _creator
+    ) {
+        require(bytes(_poolName).length > 0,                "Pool name required");
+        require(_criteriaMetadataCID != bytes32(0),         "CID required");
+        require(_submissionStart > block.timestamp,         "Start must be future");
+        require(_submissionEnd > _submissionStart + 1 days, "Min 1-day submission window");
+        require(_reviewDuration >= 1 days,                  "Min 1-day review");
+        require(_initialSigners.length >= 3,                "Min 3 signers");
+        require(_usdtTokenAddress != address(0),            "Invalid USDT address");
+        require(_treasury != address(0),                    "Invalid treasury");
+        require(_sbtContract != address(0),                 "Invalid SBT contract");
+        require(_creator != address(0),                     "Invalid creator");
+        require(_treasuryFeeBps <= 10_000,                  "Fee > 100%");
+
+        poolName            = _poolName;
+        criteriaMetadataCID = _criteriaMetadataCID;
+        submissionStart     = _submissionStart;
+        submissionEnd       = _submissionEnd;
+        reviewEnd           = _submissionEnd + _reviewDuration;
+        signerLockedAt      = _submissionStart;
+        creator             = _creator;
+        treasury            = _treasury;
+        TREASURY_FEE_BPS    = _treasuryFeeBps;
+        usdt                = IERC20(_usdtTokenAddress);
+        sbtContract         = IScholarChainSBT(_sbtContract);
+
+        // Factory gets DEFAULT_ADMIN_ROLE to enable pause/unpause
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+
+        for (uint256 i = 0; i < _initialSigners.length; i++) {
+            _addSignerInternal(_initialSigners[i]);
+        }
+    }
+
+    // Emergency pause — DEFAULT_ADMIN_ROLE only
+    function pause()   external onlyRole(DEFAULT_ADMIN_ROLE) { _pause(); }
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) { _unpause(); }
