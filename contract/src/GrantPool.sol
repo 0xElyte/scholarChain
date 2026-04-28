@@ -202,3 +202,34 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
     // Emergency pause — DEFAULT_ADMIN_ROLE only
     function pause()   external onlyRole(DEFAULT_ADMIN_ROLE) { _pause(); }
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) { _unpause(); }
+
+     // Accepted in PENDING or ACTIVE — open to any donor
+    function donate(uint256 amount) external nonReentrant whenNotPaused {
+        PoolState s = _state();
+        if (s != PoolState.PENDING && s != PoolState.ACTIVE)
+            revert InvalidState("PENDING or ACTIVE", _stateLabel(s));
+        if (amount == 0) revert InvalidAmount();
+        _recordDonation(msg.sender, amount);
+        usdt.safeTransferFrom(msg.sender, address(this), amount);
+        emit DonationReceived(msg.sender, amount);
+    }
+
+    // Creator top-up — identical accounting to donate()
+    function topUpPool(uint256 amount) external nonReentrant whenNotPaused onlyCreator {
+        PoolState s = _state();
+        if (s != PoolState.PENDING && s != PoolState.ACTIVE)
+            revert InvalidState("PENDING or ACTIVE", _stateLabel(s));
+        if (amount == 0) revert InvalidAmount();
+        _recordDonation(msg.sender, amount);
+        usdt.safeTransferFrom(msg.sender, address(this), amount);
+        emit DonationReceived(msg.sender, amount);
+    }
+
+    function _recordDonation(address donor, uint256 amount) internal {
+        if (!_isDonor[donor]) {
+            _isDonor[donor] = true;
+            donors.push(donor);
+        }
+        donations[donor] += amount;
+        totalDeposited   += amount;
+    }
