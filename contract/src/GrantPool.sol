@@ -14,6 +14,7 @@ interface IScholarChainSBT {
 }
 
 // Custom errors — cheaper than require strings (~50 gas saved per revert)
+error InvalidCID();
 error Unauthorized();
 error InvalidState(string expected, string current);
 error AlreadySubmitted();
@@ -123,7 +124,8 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         if (winners.length > 0) {
             bool allClaimed = true;
             for (uint256 i = 0; i < winners.length; i++) {
-                if (!hasClaimed[winners[i]]) { allClaimed = false; break; }
+                if (!hasClaimed[winners[i]]) allClaimed = false;
+                break;
             }
             if (allClaimed) return PoolState.CLOSED;
         }
@@ -203,6 +205,9 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         // Factory gets DEFAULT_ADMIN_ROLE to enable pause/unpause
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
+        // Creator also gets admin role to pause/unpause their own pool  //This was added based on the review Dydex made
+        _grantRole(DEFAULT_ADMIN_ROLE, _creator);
+
         for (uint256 i = 0; i < _initialSigners.length; i++) {
             _addSignerInternal(_initialSigners[i]);
         }
@@ -252,7 +257,7 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
 
     // Update criteria CID before submission opens
     function editCriteria(bytes32 newCID) external onlyCreator inState(PoolState.PENDING) {
-        if (newCID == bytes32(0)) revert InvalidAmount();
+        if (newCID == bytes32(0)) revert InvalidCID();
         criteriaMetadataCID = newCID;
         emit CriteriaUpdated(newCID);
     }
@@ -282,7 +287,7 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
     // One proposal per benefactor, ACTIVE state only
     function submitProposal(bytes32 docCID, address payoutAddr) external whenNotPaused inState(PoolState.ACTIVE) {
         if (proposals[msg.sender].exists) revert AlreadySubmitted();
-        if (docCID == bytes32(0)) revert InvalidAmount();
+        if (docCID == bytes32(0)) revert InvalidCID();
         if (payoutAddr == address(0)) revert InvalidAddress();
         proposals[msg.sender] =
             Proposal({documentCID: docCID, payoutAddress: payoutAddr, submittedAt: block.timestamp, exists: true});
@@ -373,7 +378,8 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         // sweep dust to treasury and close pool when all winners claimed
         bool allDone = true;
         for (uint256 i = 0; i < winners.length; i++) {
-            if (!hasClaimed[winners[i]]) { allDone = false; break; }
+            if (!hasClaimed[winners[i]]) allDone = false;
+            break;
         }
         if (allDone) {
             uint256 dust = usdt.balanceOf(address(this));
