@@ -27,3 +27,64 @@ error NotADonor();
 error PoolNotCancelled();
 error SignerListLocked();
 error DistributionAlreadyEntered();
+
+contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
+    using SafeERC20 for IERC20;
+
+    // --- Roles ---
+    bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
+
+    // --- Pool identity ---
+    string  public poolName;
+    address public immutable creator;
+    IERC20  public immutable usdt;
+    IScholarChainSBT public immutable sbtContract;
+
+    // --- Treasury (Femi's multisig) and fee from factory ---
+    address public immutable treasury;
+    uint256 public immutable TREASURY_FEE_BPS;
+
+    // --- Timing ---
+    uint256 public immutable submissionStart;
+    uint256 public immutable submissionEnd;
+    uint256 public immutable reviewEnd;
+    uint256 public immutable signerLockedAt; // signer list locks at submissionStart
+
+    // --- Pool metadata ---
+    bytes32 public criteriaMetadataCID;
+
+    // --- Cancellation flag (only mutable state boolean) ---
+    bool public isCancelled;
+
+    // --- Distribution ---
+    bool    public distributionEntered;
+    uint256 public distributionAmount;  // per-winner share, set once
+    bool    private _zeroDonorRefundDone; // lets zero-winner pools reach CLOSED
+
+    // --- Donation accounting ---
+    uint256 public totalDeposited;
+    mapping(address => uint256) public donations;
+    address[] public donors;
+    mapping(address => bool) private _isDonor;
+
+    // --- Signers ---
+    address[] public signers;
+    mapping(address => bool) public isSigner;
+
+    // --- Proposals ---
+    struct Proposal {
+        bytes32 documentCID;   // IPFS CID stored as bytes32
+        address payoutAddress; // address that receives grant funds
+        uint256 submittedAt;
+        bool    exists;        // double-submission guard
+    }
+    mapping(address => Proposal) public proposals;
+
+    // --- Voting ---
+    mapping(address => mapping(address => bool)) public votes; // signer => benefactor => voted
+    mapping(address => uint256) public approvalCount;
+
+    // --- Winners ---
+    address[] public winners;
+    mapping(address => bool) public isWinner;
+    mapping(address => bool) public hasClaimed;
