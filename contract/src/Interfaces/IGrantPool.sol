@@ -15,7 +15,6 @@ interface IGrantPool {
     function currentState() external view returns (string memory);
     function getSigners() external view returns (address[] memory);
     function getWinners() external view returns (address[] memory);
-    function getDonors() external view returns (address[] memory);
     function quorumThreshold() external view returns (uint256);
     function getApprovalCount(address benefactor) external view returns (uint256);
     function hasVoted(address signer, address benefactor) external view returns (bool);
