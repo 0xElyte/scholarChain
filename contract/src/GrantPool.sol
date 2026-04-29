@@ -14,6 +14,12 @@ interface IScholarChainSBT {
 }
 
 // Custom errors — cheaper than require strings (~50 gas saved per revert)
+error EmptyPoolName();
+error InvalidDuration();
+error InvalidStartTime();
+error TooFewSigners();
+error InvalidFeeBps();
+
 error InvalidCID();
 error Unauthorized();
 error InvalidState(string expected, string current);
@@ -62,11 +68,14 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
     uint256 public distributionAmount; // per-winner share, set once
     bool private _zeroDonorRefundDone; // lets zero-winner pools reach CLOSED
 
+    uint256 private _claimedCount;
+    bool public zeroWinnerDistributed;
+
     // --- Donation accounting ---
     uint256 public totalDeposited;
     mapping(address => uint256) public donations;
-    address[] public donors;
-    mapping(address => bool) private _isDonor;
+    // address[] public donors;
+    // mapping(address => bool) private _isDonor;
 
     // --- Signers ---
     address[] public signers;
@@ -121,13 +130,8 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         if (block.timestamp < submissionEnd) return PoolState.ACTIVE;
         if (block.timestamp < reviewEnd) return PoolState.REVIEW;
         if (_zeroDonorRefundDone) return PoolState.CLOSED;
-        if (winners.length > 0) {
-            bool allClaimed = true;
-            for (uint256 i = 0; i < winners.length; i++) {
-                if (!hasClaimed[winners[i]]) allClaimed = false;
-                break;
-            }
-            if (allClaimed) return PoolState.CLOSED;
+        if (winners.length > 0 && _claimedCount == winners.length) {
+            return PoolState.CLOSED;
         }
         return PoolState.DISTRIBUTING;
     }
@@ -178,17 +182,17 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         address _sbtContract,
         address _creator
     ) {
-        require(bytes(_poolName).length > 0, "Pool name required");
-        require(_criteriaMetadataCID != bytes32(0), "CID required");
-        require(_submissionStart > block.timestamp, "Start must be future");
-        require(_submissionEnd > _submissionStart + 1 days, "Min 1-day submission window");
-        require(_reviewDuration >= 1 days, "Min 1-day review");
-        require(_initialSigners.length >= 3, "Min 3 signers");
-        require(_usdtTokenAddress != address(0), "Invalid USDT address");
-        require(_treasury != address(0), "Invalid treasury");
-        require(_sbtContract != address(0), "Invalid SBT contract");
-        require(_creator != address(0), "Invalid creator");
-        require(_treasuryFeeBps <= 10_000, "Fee > 100%");
+        if (bytes(_poolName).length == 0) revert EmptyPoolName();
+        if (_criteriaMetadataCID == bytes32(0)) revert InvalidCID();
+        if (_submissionStart <= block.timestamp) revert InvalidStartTime();
+        if (_submissionEnd <= _submissionStart + 1 days) revert InvalidDuration();
+        if (_reviewDuration < 1 days) revert InvalidDuration();
+        if (_initialSigners.length < 3) revert TooFewSigners();
+        if (_usdtTokenAddress == address(0)) revert InvalidAddress();
+        if (_treasury == address(0)) revert InvalidAddress();
+        if (_sbtContract == address(0)) revert InvalidAddress();
+        if (_creator == address(0)) revert InvalidAddress();
+        if (_treasuryFeeBps > 10_000) revert InvalidFeeBps();
 
         poolName = _poolName;
         criteriaMetadataCID = _criteriaMetadataCID;
@@ -247,10 +251,6 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
     }
 
     function _recordDonation(address donor, uint256 amount) internal {
-        if (!_isDonor[donor]) {
-            _isDonor[donor] = true;
-            donors.push(donor);
-        }
         donations[donor] += amount;
         totalDeposited += amount;
     }
@@ -333,7 +333,7 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
 
         if (winners.length == 0) {
             // zero-winner path — refund 90% proportionally to donors
-            _refundDonorsProportional(remaining, total);
+            zeroWinnerDistributed = true;
             _zeroDonorRefundDone = true;
             distributionAmount = 0;
             emit DistributionPhaseEntered(0, 0);
@@ -344,21 +344,6 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         }
     }
 
-    function _refundDonorsProportional(uint256 refundPool, uint256 totalDep) internal {
-        uint256 len = donors.length;
-        for (uint256 i = 0; i < len; i++) {
-            address donor = donors[i];
-            uint256 share = donations[donor];
-            if (share == 0) continue;
-            uint256 refundAmt = (share * refundPool) / totalDep;
-            donations[donor] = 0; // CEI — zero before transfer
-            if (refundAmt > 0) {
-                usdt.safeTransfer(donor, refundAmt);
-                emit RefundClaimed(donor, refundAmt);
-            }
-        }
-    }
-
     // Pull payment — winner receives funds at their declared payoutAddress
     // SBT minted AFTER transfer to prevent ERC-721 callback reentrancy
     function claimGrant() external nonReentrant whenNotPaused inState(PoolState.DISTRIBUTING) {
@@ -366,6 +351,7 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         if (hasClaimed[msg.sender]) revert AlreadyClaimed();
 
         hasClaimed[msg.sender] = true; // CEI — mark before external calls
+        _claimedCount++;
 
         address payoutAddr = proposals[msg.sender].payoutAddress;
         uint256 amount = distributionAmount;
@@ -376,12 +362,7 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         sbtContract.mint(payoutAddr, address(this), poolName, amount, payoutAddr);
 
         // sweep dust to treasury and close pool when all winners claimed
-        bool allDone = true;
-        for (uint256 i = 0; i < winners.length; i++) {
-            if (!hasClaimed[winners[i]]) allDone = false;
-            break;
-        }
-        if (allDone) {
+        if (_claimedCount == winners.length) {
             uint256 dust = usdt.balanceOf(address(this));
             if (dust > 0) usdt.safeTransfer(treasury, dust);
             emit PoolClosed();
@@ -390,10 +371,25 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
 
     // Pull refund for cancelled pools — only path for donors, no push loop
     function claimRefund() external nonReentrant whenNotPaused {
-        if (!isCancelled) revert PoolNotCancelled();
-        if (donations[msg.sender] == 0) revert NotADonor();
-        uint256 amount = donations[msg.sender];
-        donations[msg.sender] = 0; // CEI
+        uint256 amount;
+
+        if (isCancelled) {
+            if (donations[msg.sender] == 0) revert NotADonor();
+            amount = donations[msg.sender];
+            donations[msg.sender] = 0;
+        } else if (zeroWinnerDistributed) {
+            if (donations[msg.sender] == 0) revert NotADonor();
+
+            uint256 total = totalDeposited;
+            uint256 fee = (total * TREASURY_FEE_BPS) / 10_000;
+            uint256 remaining = total - fee;
+
+            amount = (donations[msg.sender] * remaining) / total;
+            donations[msg.sender] = 0;
+        } else {
+            revert PoolNotCancelled();
+        }
+
         usdt.safeTransfer(msg.sender, amount);
         emit RefundClaimed(msg.sender, amount);
     }
@@ -405,10 +401,6 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
 
     function getWinners() external view returns (address[] memory) {
         return winners;
-    }
-
-    function getDonors() external view returns (address[] memory) {
-        return donors;
     }
 
     function quorumThreshold() external view returns (uint256) {
