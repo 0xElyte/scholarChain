@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {FieldDefinition} from "../Types/GrantPoolTypes.sol";
+
 interface IScholarChainFactory {
 
     struct CreatePoolParams {
@@ -11,6 +13,7 @@ interface IScholarChainFactory {
         uint256 reviewDuration;
         address[] initialSigners;
         address usdtTokenAddress;
+        FieldDefinition[] fieldDefinitions;
     }
 
     // Events 

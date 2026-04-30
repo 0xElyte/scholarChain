@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {FieldDefinition} from "../Types/GrantPoolTypes.sol";
+
 interface IGrantPool {
     function donate(uint256 amount) external;
     function topUpPool(uint256 amount) external;
@@ -26,4 +28,5 @@ interface IGrantPool {
     function isSigner(address) external view returns (bool);
     function treasury() external view returns (address);
     function creator() external view returns (address);
+    function getFieldDefinitions() external view returns (FieldDefinition[] memory);
 }

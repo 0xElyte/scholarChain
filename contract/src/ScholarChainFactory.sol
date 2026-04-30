@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/access/IAccessControl.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import {GrantPool} from "./GrantPool.sol";
+import {FieldDefinition} from "./Types/GrantPoolTypes.sol";
 
 // Custom errors
 error Factory__ZeroAddress();
@@ -18,6 +19,8 @@ error Factory__TooFewSigners();
 error Factory__TooManySigners();
 error Factory__DuplicateOrZeroSigner();
 error Factory__InvalidFeeBps();
+error Factory__EmptyFieldDefinitions();
+error Factory__TooManyFields();
 
 contract ScholarChainFactory is AccessControl, Pausable {
 
@@ -27,6 +30,7 @@ contract ScholarChainFactory is AccessControl, Pausable {
     // O(n²) uniqueness loop is cheaper than storage mappings for small n;
     // cap prevents unbounded gas / DoS on createPool
     uint256 private constant MAX_SIGNERS = 20;
+    uint256 private constant MAX_FIELDS  = 10;
 
     // ─── State 
     address public sbtContract;
@@ -53,6 +57,7 @@ contract ScholarChainFactory is AccessControl, Pausable {
         uint256 reviewDuration;
         address[] initialSigners;
         address usdtTokenAddress;
+        FieldDefinition[] fieldDefinitions;
     }
 
     // ─── Constructor
@@ -91,7 +96,8 @@ contract ScholarChainFactory is AccessControl, Pausable {
             treasury,
             TREASURY_FEE_BPS,
             sbtContract,
-            msg.sender
+            msg.sender,
+            p.fieldDefinitions
         );
 
         poolAddress = address(pool);
@@ -145,6 +151,8 @@ contract ScholarChainFactory is AccessControl, Pausable {
         if (p.initialSigners.length < 3) revert Factory__TooFewSigners();
         if (p.initialSigners.length > MAX_SIGNERS) revert Factory__TooManySigners();
         if (p.usdtTokenAddress == address(0)) revert Factory__ZeroAddress();
+        if (p.fieldDefinitions.length == 0) revert Factory__EmptyFieldDefinitions();
+        if (p.fieldDefinitions.length > MAX_FIELDS) revert Factory__TooManyFields();
 
         for (uint256 i = 0; i < p.initialSigners.length; i++) {
             if (p.initialSigners[i] == address(0)) revert Factory__DuplicateOrZeroSigner();

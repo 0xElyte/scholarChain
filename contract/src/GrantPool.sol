@@ -8,6 +8,8 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+import {FieldType, FieldDefinition} from "./Types/GrantPoolTypes.sol";
+
 // SBT interface — Omoboi must match this exact signature
 interface IScholarChainSBT {
     function mint(address to, address poolAddr, string calldata poolName, uint256 amount, address payoutAddr) external;
@@ -34,6 +36,8 @@ error NotADonor();
 error PoolNotCancelled();
 error SignerListLocked();
 error DistributionAlreadyEntered();
+error EmptyFieldDefinitions();
+error TooManyFields();
 
 contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
@@ -59,6 +63,10 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
 
     // --- Pool metadata ---
     bytes32 public criteriaMetadataCID;
+
+    // --- Submission form schema (set once at construction, never mutated) ---
+    uint256 private constant MAX_FIELDS = 10;
+    FieldDefinition[] private _fieldDefinitions;
 
     // --- Cancellation flag (only mutable state boolean) ---
     bool public isCancelled;
@@ -180,7 +188,8 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         address _treasury,
         uint256 _treasuryFeeBps,
         address _sbtContract,
-        address _creator
+        address _creator,
+        FieldDefinition[] memory _fieldDefs
     ) {
         if (bytes(_poolName).length == 0) revert EmptyPoolName();
         if (_criteriaMetadataCID == bytes32(0)) revert InvalidCID();
@@ -193,6 +202,8 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         if (_sbtContract == address(0)) revert InvalidAddress();
         if (_creator == address(0)) revert InvalidAddress();
         if (_treasuryFeeBps > 10_000) revert InvalidFeeBps();
+        if (_fieldDefs.length == 0) revert EmptyFieldDefinitions();
+        if (_fieldDefs.length > MAX_FIELDS) revert TooManyFields();
 
         poolName = _poolName;
         criteriaMetadataCID = _criteriaMetadataCID;
@@ -214,6 +225,10 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
 
         for (uint256 i = 0; i < _initialSigners.length; i++) {
             _addSignerInternal(_initialSigners[i]);
+        }
+
+        for (uint256 i = 0; i < _fieldDefs.length; i++) {
+            _fieldDefinitions.push(_fieldDefs[i]);
         }
     }
 
@@ -417,5 +432,10 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
 
     function hasVoted(address signer, address benefactor) external view returns (bool) {
         return votes[signer][benefactor];
+    }
+
+    // Returns the submission form schema — frontend uses this to render the dynamic form
+    function getFieldDefinitions() external view returns (FieldDefinition[] memory) {
+        return _fieldDefinitions;
     }
 }
