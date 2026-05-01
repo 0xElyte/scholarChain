@@ -23,7 +23,7 @@ library TreasuryMultisigEvents {
     event RequiredSignaturesChanged(uint256 newThreshold);
     event ProposalCreated(uint256 indexed proposalId, address indexed proposer, address indexed to, bytes data);
     event ProposalSignatureRevoked(uint256 indexed proposalId, address indexed signer);
-    event ProposalExecuted(uint256 indexed proposalId);
+    event ProposalExecuted(uint256 indexed proposalId, address indexed target, bytes4 selector);
     event ProposalSigned(uint256 indexed proposalId, address indexed signer);
 }
 

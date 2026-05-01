@@ -145,10 +145,10 @@ contract ScholarChainSBT is ERC721, ERC721URIStorage, AccessControl, ReentrancyG
      * @dev Overridden to disable transfers - Soul-Bound tokens cannot be transferred.
      */
     function transferFrom(
-        address from,
-        address to,
-        uint256 tokenId
-    ) public override(ERC721, IERC721) {
+        address, /* from */
+        address, /* to */
+        uint256  /* tokenId */
+    ) public pure override(ERC721, IERC721) {
         revert TransferNotAllowed();
     }
 
@@ -159,11 +159,11 @@ contract ScholarChainSBT is ERC721, ERC721URIStorage, AccessControl, ReentrancyG
      *      The 3-arg version internally calls this 4-arg version, so it will also revert.
      */
     function safeTransferFrom(
-        address from,
-        address to,
-        uint256 tokenId,
-        bytes memory data
-    ) public override(ERC721, IERC721) {
+        address, /* from */
+        address, /* to */
+        uint256, /* tokenId */
+        bytes memory /* data */
+    ) public pure override(ERC721, IERC721) {
         revert TransferNotAllowed();
     }
 
@@ -171,7 +171,7 @@ contract ScholarChainSBT is ERC721, ERC721URIStorage, AccessControl, ReentrancyG
      * @dev See {ERC721-approve}.
      * @dev Overridden to disable approvals - Soul-Bound tokens cannot have operators.
      */
-    function approve(address to, uint256 tokenId) public override(ERC721, IERC721) {
+    function approve(address, /* to */ uint256 /* tokenId */) public pure override(ERC721, IERC721) {
         revert TransferNotAllowed();
     }
 
@@ -179,7 +179,7 @@ contract ScholarChainSBT is ERC721, ERC721URIStorage, AccessControl, ReentrancyG
      * @dev See {ERC721-setApprovalForAll}.
      * @dev Overridden to disable approvals - Soul-Bound tokens cannot have operators.
      */
-    function setApprovalForAll(address operator, bool approved) public override(ERC721, IERC721) {
+    function setApprovalForAll(address, /* operator */ bool /* approved */) public pure override(ERC721, IERC721) {
         revert TransferNotAllowed();
     }
 
@@ -201,7 +201,7 @@ contract ScholarChainSBT is ERC721, ERC721URIStorage, AccessControl, ReentrancyG
      * - awarded_at: Unix timestamp of mint
      */
     function _generateTokenURI(
-        uint256 tokenId,
+        uint256, /* tokenId */
         string memory poolName,
         address poolAddr,
         uint256 amount,
