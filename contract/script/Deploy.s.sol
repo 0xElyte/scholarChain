@@ -7,6 +7,10 @@ import {ScholarChainSBT} from "../src/ScholarChainSBT.sol";
 import {ScholarChainFactory} from "../src/ScholarChainFactory.sol";
 import "@openzeppelin/contracts/access/IAccessControl.sol";
 
+error Deploy__ZeroAddress();
+error Deploy__InvalidRequiredSignatures();
+error Deploy__DuplicateSigner();
+
 /// @notice Deploys all ScholarChain contracts in the correct dependency order.
 ///
 /// Required env vars:
@@ -23,8 +27,8 @@ import "@openzeppelin/contracts/access/IAccessControl.sol";
 ///   2. ScholarChainSBT
 ///   3. ScholarChainFactory (treasury, sbt, feeBps=1000)
 ///   4. Grant factory DEFAULT_ADMIN_ROLE on SBT (so it can give MINTER_ROLE to pools)
-///   5. Transfer DEFAULT_ADMIN_ROLE on both contracts to team multisig
-///   6. Renounce EOA admin
+///   5. Grant DEFAULT_ADMIN_ROLE on factory and SBT to team multisig
+///   6. Renounce deployer admin; factory keeps SBT admin so it can authorize pools
 contract Deploy is Script {
 
     uint256 constant TREASURY_FEE_BPS = 1000; // 10%
@@ -41,6 +45,13 @@ contract Deploy is Script {
         treasurySigners[0] = vm.envAddress("TREASURY_SIGNER_1");
         treasurySigners[1] = vm.envAddress("TREASURY_SIGNER_2");
         treasurySigners[2] = vm.envAddress("TREASURY_SIGNER_3");
+
+        _validateDeploymentConfig(
+            usdtAddress,
+            teamMultisig,
+            requiredSigs,
+            treasurySigners
+        );
 
         vm.startBroadcast(deployerKey);
 
@@ -69,12 +80,13 @@ contract Deploy is Script {
         IAccessControl(address(sbt)).grantRole(bytes32(0), address(factory));
         console.log("Factory granted DEFAULT_ADMIN_ROLE on SBT");
 
-        // 5. Hand protocol admin to team multisig
+        // 5. Hand protocol admin to team multisig. The factory intentionally
+        //    remains an SBT admin so it can authorize newly deployed pools.
         IAccessControl(address(factory)).grantRole(bytes32(0), teamMultisig);
         IAccessControl(address(sbt)).grantRole(bytes32(0), teamMultisig);
         console.log("DEFAULT_ADMIN_ROLE transferred to team multisig:", teamMultisig);
 
-        // 6. Deployer gives up its own DEFAULT_ADMIN_ROLE — multisig is sole admin from here
+        // 6. Deployer gives up its own DEFAULT_ADMIN_ROLE.
         IAccessControl(address(factory)).renounceRole(bytes32(0), deployer);
         IAccessControl(address(sbt)).renounceRole(bytes32(0), deployer);
         console.log("Deployer admin revoked");
@@ -87,5 +99,26 @@ contract Deploy is Script {
         console.log("ScholarChainSBT  :", address(sbt));
         console.log("ScholarChainFactory:", address(factory));
         console.log("Admin             :", teamMultisig);
+    }
+
+    function _validateDeploymentConfig(
+        address usdtAddress,
+        address teamMultisig,
+        uint256 requiredSigs,
+        address[] memory treasurySigners
+    ) internal pure {
+        if (usdtAddress == address(0) || teamMultisig == address(0)) {
+            revert Deploy__ZeroAddress();
+        }
+        if (requiredSigs == 0 || requiredSigs > treasurySigners.length) {
+            revert Deploy__InvalidRequiredSignatures();
+        }
+
+        for (uint256 i = 0; i < treasurySigners.length; i++) {
+            if (treasurySigners[i] == address(0)) revert Deploy__ZeroAddress();
+            for (uint256 j = i + 1; j < treasurySigners.length; j++) {
+                if (treasurySigners[i] == treasurySigners[j]) revert Deploy__DuplicateSigner();
+            }
+        }
     }
 }

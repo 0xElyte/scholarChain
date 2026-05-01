@@ -206,34 +206,49 @@ contract ScholarChainSBT is ERC721, ERC721URIStorage, AccessControl, ReentrancyG
         address poolAddr,
         uint256 amount,
         address payoutAddr
-    ) 
-        internal 
-        view 
-        returns (string memory) 
+    )
+        internal
+        view
+        returns (string memory)
     {
-        // Build JSON manually to avoid external library dependencies
-        string memory name = string(abi.encodePacked(poolName, " Grant Award"));
-        
-        // Build the JSON string
         string memory json = string(abi.encodePacked(
-            "{",
-            '"name":"', name, '",',
+            _jsonHeader(poolName, poolAddr, amount),
+            _jsonFooter(poolName, poolAddr, amount, payoutAddr)
+        ));
+        return string(abi.encodePacked("data:application/json;base64,", _base64Encode(bytes(json))));
+    }
+
+    function _jsonHeader(
+        string memory poolName,
+        address poolAddr,
+        uint256 amount
+    ) private pure returns (string memory) {
+        return string(abi.encodePacked(
+            '{"name":"', poolName, ' Grant Award",',
             '"description":"ScholarChain Grant Award - A permanent on-chain record of your grant receipt. This Soul-Bound Token represents the achievement of being selected as a grant winner in the ScholarChain decentralized philanthropy protocol.",',
             '"attributes":[',
                 '{"trait_type":"Pool Address","value":"', _toHexString(poolAddr), '"},',
                 '{"trait_type":"Grant Amount","value":', Strings.toString(amount), '},',
                 '{"trait_type":"Token Standard","value":"ERC-721 Soul-Bound"},',
                 '{"trait_type":"Protocol","value":"ScholarChain"}',
-            "],",
+            '],'
+        ));
+    }
+
+    function _jsonFooter(
+        string memory poolName,
+        address poolAddr,
+        uint256 amount,
+        address payoutAddr
+    ) private view returns (string memory) {
+        return string(abi.encodePacked(
             '"pool_address":"', _toHexString(poolAddr), '",',
             '"grant_name":"', poolName, '",',
             '"grant_amount":', Strings.toString(amount), ',',
             '"winner_wallet":"', _toHexString(payoutAddr), '",',
             '"awarded_at":', Strings.toString(block.timestamp),
-            "}"
+            '}'
         ));
-        
-        return string(abi.encodePacked("data:application/json;base64,", _base64Encode(bytes(json))));
     }
 
     // ============================================
@@ -270,7 +285,8 @@ contract ScholarChainSBT is ERC721, ERC721URIStorage, AccessControl, ReentrancyG
         
         uint256 length = data.length;
         uint256 remainder = length % 3;
-        uint256 resultLength = (length / 3) * 4 + (remainder > 0 ? 4 : 0);
+        // forge-lint: disable-next-line(divide-before-multiply)
+        uint256 resultLength = ((length + 2) / 3) * 4; // ceil(length/3)*4 — standard base64 formula
         
         bytes memory result = new bytes(resultLength);
         uint256 resultIndex;
