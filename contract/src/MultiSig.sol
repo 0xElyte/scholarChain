@@ -10,7 +10,7 @@ import {
     TreasuryMultisigEvents,
     TreasuryMultisigStructs
 } from "./Types/TreasuryMultisigTypes.sol";
-
+TREASURY_FEE_BPS
 import { IMultiSig } from "./Interfaces/IMultiSig.sol";
 
 abstract contract MultiSig is ReentrancyGuard, IMultiSig {
