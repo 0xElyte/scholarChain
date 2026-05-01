@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/access/IAccessControl.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
-import {GrantPool} from "./GrantPool.sol";
+import {GrantPool, GrantPoolParams} from "./GrantPool.sol";
 import {FieldDefinition} from "./Types/GrantPoolTypes.sol";
 
 // Custom errors
@@ -65,7 +65,7 @@ contract ScholarChainFactory is AccessControl, Pausable {
     constructor(address _treasury, address _sbtContract, uint256 _treasuryFeeBps) {
         if (_treasury == address(0)) revert Factory__ZeroAddress();
         if (_sbtContract == address(0) || _sbtContract.code.length == 0) revert Factory__NotAContract();
-        if (_treasuryFeeBps == 0 || _treasuryFeeBps > 10_000) revert Factory__InvalidFeeBps();
+        if (_treasuryFeeBps != 1000) revert Factory__InvalidFeeBps();
 
         treasury = _treasury;
         sbtContract = _sbtContract;
@@ -85,20 +85,20 @@ contract ScholarChainFactory is AccessControl, Pausable {
     {
         _validateParams(p);
 
-        GrantPool pool = new GrantPool(
-            p.poolName,
-            p.criteriaMetadataCID,
-            p.submissionStart,
-            p.submissionEnd,
-            p.reviewDuration,
-            p.initialSigners,
-            p.usdtTokenAddress,
-            treasury,
-            TREASURY_FEE_BPS,
-            sbtContract,
-            msg.sender,
-            p.fieldDefinitions
-        );
+        GrantPool pool = new GrantPool(GrantPoolParams({
+            poolName:            p.poolName,
+            criteriaMetadataCID: p.criteriaMetadataCID,
+            submissionStart:     p.submissionStart,
+            submissionEnd:       p.submissionEnd,
+            reviewDuration:      p.reviewDuration,
+            initialSigners:      p.initialSigners,
+            usdtTokenAddress:    p.usdtTokenAddress,
+            treasury:            treasury,
+            treasuryFeeBps:      TREASURY_FEE_BPS,
+            sbtContract:         sbtContract,
+            creator:             msg.sender,
+            fieldDefinitions:    p.fieldDefinitions
+        }));
 
         poolAddress = address(pool);
 
@@ -151,6 +151,7 @@ contract ScholarChainFactory is AccessControl, Pausable {
         if (p.initialSigners.length < 3) revert Factory__TooFewSigners();
         if (p.initialSigners.length > MAX_SIGNERS) revert Factory__TooManySigners();
         if (p.usdtTokenAddress == address(0)) revert Factory__ZeroAddress();
+        if (p.usdtTokenAddress.code.length == 0) revert Factory__NotAContract();
         if (p.fieldDefinitions.length == 0) revert Factory__EmptyFieldDefinitions();
         if (p.fieldDefinitions.length > MAX_FIELDS) revert Factory__TooManyFields();
 

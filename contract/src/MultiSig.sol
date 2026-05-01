@@ -94,7 +94,8 @@ abstract contract MultiSig is ReentrancyGuard, IMultiSig {
     }
 
     function _changeRequiredSignatures(uint256 _newThreshold) internal virtual {
-        if (_newThreshold == 0 || _newThreshold > signers.length) {
+        // Fix 3: minimum of 2 prevents downgrading to a single-signer setup
+        if (_newThreshold < 2 || _newThreshold > signers.length) {
             revert TreasuryMultisigErrors.TreasuryMultisig__InvalidNumberOfRequiredSignatures();
         }
 
@@ -223,18 +224,29 @@ abstract contract MultiSig is ReentrancyGuard, IMultiSig {
 
         proposal.executed = true;
 
-        (bool success, bytes memory returnData) = proposal.to.call(proposal.data);
-
+        // Fix 2: plain success check — no return-data decoding.
+        // Governance calls (grantRole, pause, setTreasury) return void; decoding
+        // their 32-byte return slots as bool would produce false positives.
+        (bool success,) = proposal.to.call(proposal.data);
         if (!success)
             revert TreasuryMultisigErrors.TreasuryMultisig__ProposalExecutionFailed();
 
-        if (returnData.length == 32) {
-            bool result = abi.decode(returnData, (bool));
-            if (!result)
-                revert TreasuryMultisigErrors.TreasuryMultisig__ProposalExecutionFailed();
-        }
+        // Fix 4: emit target + selector so frontend / audit trail can identify what ran
+        bytes4 selector = proposal.data.length >= 4 ? bytes4(proposal.data) : bytes4(0);
+        emit TreasuryMultisigEvents.ProposalExecuted(_proposalId, proposal.to, selector);
+    }
 
-        emit TreasuryMultisigEvents.ProposalExecuted(_proposalId);
+    /// @notice Propose an arbitrary contract call requiring multisig approval.
+    ///         Use this to execute protocol admin actions (grantRole, pause, setTreasury, etc.)
+    ///         on any contract where this multisig holds the required role.
+    function proposeArbitraryCall(
+        address _to,
+        bytes calldata _data
+    ) external virtual onlySigner returns (uint256) {
+        if (_to == address(0))
+            revert TreasuryMultisigErrors.TreasuryMultisig__InvalidParameters();
+        proposeAndSign(_to, _data);
+        return proposalCount;
     }
 
     function proposeAddSigner(

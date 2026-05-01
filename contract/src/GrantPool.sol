@@ -8,7 +8,7 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import {FieldType, FieldDefinition} from "./Types/GrantPoolTypes.sol";
+import {FieldDefinition} from "./Types/GrantPoolTypes.sol";
 
 // SBT interface — Omoboi must match this exact signature
 interface IScholarChainSBT {
@@ -38,6 +38,24 @@ error SignerListLocked();
 error DistributionAlreadyEntered();
 error EmptyFieldDefinitions();
 error TooManyFields();
+error RecoveryTooEarly();
+error NothingToRecover();
+
+// Passed as a single memory pointer to avoid >16-slot stack depth in the caller
+struct GrantPoolParams {
+    string poolName;
+    bytes32 criteriaMetadataCID;
+    uint256 submissionStart;
+    uint256 submissionEnd;
+    uint256 reviewDuration;
+    address[] initialSigners;
+    address usdtTokenAddress;
+    address treasury;
+    uint256 treasuryFeeBps;
+    address sbtContract;
+    address creator;
+    FieldDefinition[] fieldDefinitions;
+}
 
 contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
@@ -75,6 +93,9 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
     bool public distributionEntered;
     uint256 public distributionAmount; // per-winner share, set once
     bool private _zeroDonorRefundDone; // lets zero-winner pools reach CLOSED
+
+    // Admin can recover unclaimed winner funds 90 days after reviewEnd
+    uint256 public constant UNCLAIMED_RECOVERY_DELAY = 90 days;
 
     uint256 private _claimedCount;
     bool public zeroWinnerDistributed;
@@ -176,59 +197,46 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         _;
     }
 
-    // Deployed by ScholarChainFactory (Raphael) — receives treasuryFeeBps from factory constant
-    constructor(
-        string memory _poolName,
-        bytes32 _criteriaMetadataCID,
-        uint256 _submissionStart,
-        uint256 _submissionEnd,
-        uint256 _reviewDuration,
-        address[] memory _initialSigners,
-        address _usdtTokenAddress,
-        address _treasury,
-        uint256 _treasuryFeeBps,
-        address _sbtContract,
-        address _creator,
-        FieldDefinition[] memory _fieldDefs
-    ) {
-        if (bytes(_poolName).length == 0) revert EmptyPoolName();
-        if (_criteriaMetadataCID == bytes32(0)) revert InvalidCID();
-        if (_submissionStart <= block.timestamp) revert InvalidStartTime();
-        if (_submissionEnd <= _submissionStart + 1 days) revert InvalidDuration();
-        if (_reviewDuration < 1 days) revert InvalidDuration();
-        if (_initialSigners.length < 3) revert TooFewSigners();
-        if (_usdtTokenAddress == address(0)) revert InvalidAddress();
-        if (_treasury == address(0)) revert InvalidAddress();
-        if (_sbtContract == address(0)) revert InvalidAddress();
-        if (_creator == address(0)) revert InvalidAddress();
-        if (_treasuryFeeBps > 10_000) revert InvalidFeeBps();
-        if (_fieldDefs.length == 0) revert EmptyFieldDefinitions();
-        if (_fieldDefs.length > MAX_FIELDS) revert TooManyFields();
+    // Deployed by ScholarChainFactory — all params passed as a single struct to stay within stack limits
+    constructor(GrantPoolParams memory p) {
+        if (bytes(p.poolName).length == 0) revert EmptyPoolName();
+        if (p.criteriaMetadataCID == bytes32(0)) revert InvalidCID();
+        if (p.submissionStart <= block.timestamp) revert InvalidStartTime();
+        if (p.submissionEnd <= p.submissionStart + 1 days) revert InvalidDuration();
+        if (p.reviewDuration < 1 days) revert InvalidDuration();
+        if (p.initialSigners.length < 3) revert TooFewSigners();
+        if (p.usdtTokenAddress == address(0)) revert InvalidAddress();
+        if (p.treasury == address(0)) revert InvalidAddress();
+        if (p.sbtContract == address(0)) revert InvalidAddress();
+        if (p.creator == address(0)) revert InvalidAddress();
+        if (p.treasuryFeeBps > 10_000) revert InvalidFeeBps();
+        if (p.fieldDefinitions.length == 0) revert EmptyFieldDefinitions();
+        if (p.fieldDefinitions.length > MAX_FIELDS) revert TooManyFields();
 
-        poolName = _poolName;
-        criteriaMetadataCID = _criteriaMetadataCID;
-        submissionStart = _submissionStart;
-        submissionEnd = _submissionEnd;
-        reviewEnd = _submissionEnd + _reviewDuration;
-        signerLockedAt = _submissionStart;
-        creator = _creator;
-        treasury = _treasury;
-        TREASURY_FEE_BPS = _treasuryFeeBps;
-        usdt = IERC20(_usdtTokenAddress);
-        sbtContract = IScholarChainSBT(_sbtContract);
+        poolName = p.poolName;
+        criteriaMetadataCID = p.criteriaMetadataCID;
+        submissionStart = p.submissionStart;
+        submissionEnd = p.submissionEnd;
+        reviewEnd = p.submissionEnd + p.reviewDuration;
+        signerLockedAt = p.submissionStart;
+        creator = p.creator;
+        treasury = p.treasury;
+        TREASURY_FEE_BPS = p.treasuryFeeBps;
+        usdt = IERC20(p.usdtTokenAddress);
+        sbtContract = IScholarChainSBT(p.sbtContract);
 
         // Factory gets DEFAULT_ADMIN_ROLE to enable pause/unpause
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
-        // Creator also gets admin role to pause/unpause their own pool  //This was added based on the review Dydex made
-        _grantRole(DEFAULT_ADMIN_ROLE, _creator);
+        // Creator also gets admin role to pause/unpause their own pool
+        _grantRole(DEFAULT_ADMIN_ROLE, p.creator);
 
-        for (uint256 i = 0; i < _initialSigners.length; i++) {
-            _addSignerInternal(_initialSigners[i]);
+        for (uint256 i = 0; i < p.initialSigners.length; i++) {
+            _addSignerInternal(p.initialSigners[i]);
         }
 
-        for (uint256 i = 0; i < _fieldDefs.length; i++) {
-            _fieldDefinitions.push(_fieldDefs[i]);
+        for (uint256 i = 0; i < p.fieldDefinitions.length; i++) {
+            _fieldDefinitions.push(p.fieldDefinitions[i]);
         }
     }
 
@@ -437,5 +445,15 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
     // Returns the submission form schema — frontend uses this to render the dynamic form
     function getFieldDefinitions() external view returns (FieldDefinition[] memory) {
         return _fieldDefinitions;
+    }
+
+    // Recover funds that winners never claimed, callable by admin after 90-day timeout.
+    // Prevents permanent fund lockup when a winner's key is lost or they never claim.
+    function recoverUnclaimedFunds() external nonReentrant onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (block.timestamp <= reviewEnd + UNCLAIMED_RECOVERY_DELAY) revert RecoveryTooEarly();
+        uint256 balance = usdt.balanceOf(address(this));
+        if (balance == 0) revert NothingToRecover();
+        usdt.safeTransfer(treasury, balance);
+        emit PoolClosed();
     }
 }
