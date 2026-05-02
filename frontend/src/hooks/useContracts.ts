@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import useRunners from "./useRunners";
 import { Contract } from "ethers";
 import GrantPoolABI from "../constants/GrantPoolABI.json";
+import FactoryABI from "../constants/FactoryABI.json";
 import { getAddress } from "ethers";
 
 export const useGrantPoolContract = (withSigner = false) => {
