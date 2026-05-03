@@ -68,7 +68,7 @@ export function Navbar({ wallet, shortAddress, onConnect }: Props) {
           <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
             <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
             <EthIcon />
-            Ethereum
+            Sepolia
           </div>
 
           {wallet.isConnected ? (

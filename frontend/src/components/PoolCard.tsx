@@ -38,17 +38,17 @@ export function PoolCard({ pool, connectedAddress }: Props) {
             <span className="text-sm font-normal text-slate-400 ml-1">USDT</span>
           </p>
         </div>
-        {pool.winners.length > 0 && (
+        {pool.winnersCount > 0 && (
           <div className="text-right">
             <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-0.5">Winners</p>
-            <p className="text-xl font-bold text-emerald-600">{pool.winners.length}</p>
+            <p className="text-xl font-bold text-emerald-600">{pool.winnersCount}</p>
           </div>
         )}
       </div>
 
       <div className="border-t border-slate-100 pt-3 flex items-center justify-between gap-2">
         <span className="text-[11px] text-slate-400">
-          {pool.signers.length} reviewers · {formatDate(pool.submissionEnd * 1000)}
+          {pool.signerCount} reviewers · {formatDate(pool.submissionEnd * 1000)}
         </span>
         <div className="flex gap-1.5">
           {isCreator && (

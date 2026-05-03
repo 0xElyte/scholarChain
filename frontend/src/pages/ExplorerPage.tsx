@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import type { WalletState, PoolState } from "../types";
-import { MOCK_POOLS } from "../data/mockData";
+import { useProtocol } from "../hooks/useProtocol";
 import { PoolCard } from "../components/PoolCard";
 
 interface Props {
@@ -21,28 +21,30 @@ const EXPLORER_PHOTO =
   "https://images.unsplash.com/photo-1758270705290-62b6294dd044?auto=format&fit=crop&w=1200&q=80";
 
 export function ExplorerPage({ wallet }: Props) {
-  const [search, setSearch]           = useState("");
+  const { pools, loading, error } = useProtocol(wallet.address);
+
+  const [search,      setSearch]      = useState("");
   const [stateFilter, setStateFilter] = useState<PoolState | "ALL">("ALL");
-  const [sortBy, setSortBy]           = useState<"newest" | "largest" | "ending">("newest");
+  const [sortBy,      setSortBy]      = useState<"newest" | "largest" | "ending">("newest");
 
   const filtered = useMemo(() => {
-    let pools = [...MOCK_POOLS];
-    if (stateFilter !== "ALL") pools = pools.filter((p) => p.state === stateFilter);
+    let list = [...pools];
+    if (stateFilter !== "ALL") list = list.filter((p) => p.state === stateFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
-      pools = pools.filter(
-        (p) => p.poolName.toLowerCase().includes(q) || p.creator.toLowerCase().includes(q)
+      list = list.filter(
+        (p) => p.poolName.toLowerCase().includes(q) || p.creator.toLowerCase().includes(q),
       );
     }
-    if (sortBy === "newest")  pools.sort((a, b) => b.createdAt - a.createdAt);
-    if (sortBy === "largest") pools.sort((a, b) => parseFloat(b.totalDeposited) - parseFloat(a.totalDeposited));
+    if (sortBy === "newest")  list.sort((a, b) => b.createdAt - a.createdAt);
+    if (sortBy === "largest") list.sort((a, b) => parseFloat(b.totalDeposited) - parseFloat(a.totalDeposited));
     if (sortBy === "ending") {
       const now = Math.floor(Date.now() / 1000);
-      pools = pools.filter((p) => p.submissionEnd > now);
-      pools.sort((a, b) => a.submissionEnd - b.submissionEnd);
+      list = list.filter((p) => p.submissionEnd > now);
+      list.sort((a, b) => a.submissionEnd - b.submissionEnd);
     }
-    return pools;
-  }, [search, stateFilter, sortBy]);
+    return list;
+  }, [pools, search, stateFilter, sortBy]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -53,16 +55,24 @@ export function ExplorerPage({ wallet }: Props) {
             <p className="text-xs font-extrabold text-teal-700 uppercase tracking-[0.22em] mb-3">Explore grants</p>
             <h1 className="text-2xl sm:text-3xl font-black text-[#07182b]">Grant Pool Explorer</h1>
             <p className="text-sm text-slate-500 mt-2 max-w-xl">
-              Browse {MOCK_POOLS.length} scholarship pools, compare funding state, and find open opportunities for scholars or donors.
+              {loading
+                ? "Loading scholarship pools from chain…"
+                : `Browse ${pools.length} scholarship pools on Sepolia.`}
             </p>
           </div>
           <img
             src={EXPLORER_PHOTO}
-            alt="Students collaborating around a laptop"
+            alt="Students collaborating"
             className="hidden md:block h-full min-h-[190px] w-full object-cover"
           />
         </div>
       </div>
+
+      {error && (
+        <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">
+          ⚠️ {error}
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative mb-4">
@@ -112,31 +122,54 @@ export function ExplorerPage({ wallet }: Props) {
         </select>
       </div>
 
-      {/* Results */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-20">
-          <p className="text-4xl mb-4">🔎</p>
-          <h3 className="text-lg font-semibold text-slate-700 mb-2">No pools found</h3>
-          <p className="text-slate-500 text-sm mb-6">Try adjusting your search or filters.</p>
-          <button
-            onClick={() => { setSearch(""); setStateFilter("ALL"); }}
-            className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
-          >
-            Clear Filters
-          </button>
+      {/* Loading skeletons */}
+      {loading && (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="scholar-card rounded-2xl p-5 h-48">
+              <div className="shimmer h-full rounded-xl" />
+            </div>
+          ))}
         </div>
-      ) : (
-        <>
-          <p className="text-xs text-slate-500 mb-4">
-            {filtered.length} pool{filtered.length !== 1 ? "s" : ""} found
-          </p>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map((p) => (
-              <PoolCard key={p.address} pool={p} connectedAddress={wallet.address} />
-            ))}
+      )}
+
+      {/* Results */}
+      {!loading && (
+        filtered.length === 0 ? (
+          <div className="text-center py-20">
+            <p className="text-4xl mb-4">🔎</p>
+            <h3 className="text-lg font-semibold text-slate-700 mb-2">No pools found</h3>
+            <p className="text-slate-500 text-sm mb-6">
+              {pools.length === 0
+                ? "No grant pools have been created yet."
+                : "Try adjusting your search or filters."}
+            </p>
+            <button
+              onClick={() => { setSearch(""); setStateFilter("ALL"); }}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              Clear Filters
+            </button>
           </div>
-        </>
+        ) : (
+          <>
+            <p className="text-xs text-slate-500 mb-4">
+              {filtered.length} pool{filtered.length !== 1 ? "s" : ""} found
+            </p>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtered.map((p) => (
+                <PoolCard key={p.address} pool={p} connectedAddress={wallet.address} />
+              ))}
+            </div>
+          </>
+        )
       )}
     </div>
   );
 }
+
+
+interface Props {
+  wallet: WalletState;
+}
+
