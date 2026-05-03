@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import "forge-std/Test.sol";
 import {ScholarChainFactory} from "../src/ScholarChainFactory.sol";
 import {GrantPool} from "../src/GrantPool.sol";
-import {FieldType, FieldDefinition} from "../src/Types/GrantPoolTypes.sol";
+import {FieldType, FieldDefinition, PoolSummary, PoolStateEnum} from "../src/Types/GrantPoolTypes.sol";
 import {MockERC20, MockSBT, Fixtures} from "./Helpers.sol";
 
 import {
@@ -335,5 +335,161 @@ contract ScholarChainFactoryTest is Test {
         vm.prank(creator);
         address poolAddr = factory.createPool(_params());
         assertTrue(poolAddr != address(0));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // GET TOTAL POOL COUNT
+    // ══════════════════════════════════════════════════════════════════════════
+
+    function test_GetTotalPoolCount_ZeroInitially() public view {
+        assertEq(factory.getTotalPoolCount(), 0);
+    }
+
+    function test_GetTotalPoolCount_IncrementsOnCreate() public {
+        vm.prank(creator); factory.createPool(_params());
+        assertEq(factory.getTotalPoolCount(), 1);
+
+        vm.prank(creator); factory.createPool(_params());
+        assertEq(factory.getTotalPoolCount(), 2);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // GET ALL POOL SUMMARIES
+    // ══════════════════════════════════════════════════════════════════════════
+
+    function test_GetAllPoolSummaries_EmptyWhenNoPools() public view {
+        PoolSummary[] memory summaries = factory.getAllPoolSummaries();
+        assertEq(summaries.length, 0);
+    }
+
+    function test_GetAllPoolSummaries_ReturnsOneSummary() public {
+        vm.prank(creator);
+        address poolAddr = factory.createPool(_params());
+
+        PoolSummary[] memory summaries = factory.getAllPoolSummaries();
+        assertEq(summaries.length, 1);
+        assertEq(summaries[0].poolAddress, poolAddr);
+        assertEq(summaries[0].poolName,    "Test Pool");
+        assertEq(summaries[0].creator,     creator);
+        assertEq(uint8(summaries[0].state), uint8(PoolStateEnum.PENDING));
+    }
+
+    function test_GetAllPoolSummaries_ReturnsManyInOrder() public {
+        vm.startPrank(creator);
+        address p1 = factory.createPool(_params());
+        address p2 = factory.createPool(_params());
+        address p3 = factory.createPool(_params());
+        vm.stopPrank();
+
+        PoolSummary[] memory summaries = factory.getAllPoolSummaries();
+        assertEq(summaries.length, 3);
+        assertEq(summaries[0].poolAddress, p1);
+        assertEq(summaries[1].poolAddress, p2);
+        assertEq(summaries[2].poolAddress, p3);
+    }
+
+    function test_GetAllPoolSummaries_FieldsMatchPoolState() public {
+        vm.prank(creator);
+        factory.createPool(_params());
+
+        PoolSummary[] memory summaries = factory.getAllPoolSummaries();
+        PoolSummary memory s = summaries[0];
+
+        assertEq(s.signerCount,       3);
+        assertEq(s.winnersCount,      0);
+        assertEq(s.claimedCount,      0);
+        assertEq(s.proposalCount,     0);
+        assertEq(s.totalDeposited,    0);
+        assertEq(s.distributionAmount, 0);
+        assertFalse(s.distributionEntered);
+        assertFalse(s.isCancelled);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // GET PROTOCOL STATS
+    // ══════════════════════════════════════════════════════════════════════════
+
+    function test_GetProtocolStats_AllZeroWhenNoPools() public view {
+        (
+            uint256 totalPools,
+            uint256 activePools,
+            uint256 totalDeposited,
+            uint256 totalWinners,
+            uint256 totalGrantsClaimed,
+            uint256 totalProposals
+        ) = factory.getProtocolStats();
+
+        assertEq(totalPools,         0);
+        assertEq(activePools,        0);
+        assertEq(totalDeposited,     0);
+        assertEq(totalWinners,       0);
+        assertEq(totalGrantsClaimed, 0);
+        assertEq(totalProposals,     0);
+    }
+
+    function test_GetProtocolStats_TotalPoolsCount() public {
+        vm.prank(creator); factory.createPool(_params());
+        vm.prank(creator); factory.createPool(_params());
+
+        (uint256 totalPools,,,,,) = factory.getProtocolStats();
+        assertEq(totalPools, 2);
+    }
+
+    function test_GetProtocolStats_ActivePoolsCountsPendingAndActive() public {
+        // pool starts in PENDING — still counts as "active" for stats
+        vm.prank(creator);
+        factory.createPool(_params());
+
+        (,uint256 activePools,,,,) = factory.getProtocolStats();
+        assertEq(activePools, 1);
+    }
+
+    function test_GetProtocolStats_ActivePoolsExcludesReview() public {
+        vm.prank(creator);
+        factory.createPool(_params());
+
+        // advance past submission — pool is now in REVIEW
+        vm.warp(block.timestamp + 9 days);
+
+        (,uint256 activePools,,,,) = factory.getProtocolStats();
+        assertEq(activePools, 0);
+    }
+
+    function test_GetProtocolStats_TotalDeposited_AggregatesAcrossPools() public {
+        // Deploy two pools, donate to each via direct GrantPool interaction
+        vm.prank(creator); address p1 = factory.createPool(_params());
+        vm.prank(creator); address p2 = factory.createPool(_params());
+
+        MockERC20 _usdt = usdt;
+        _usdt.mint(address(this), 200_000e6);
+        _usdt.approve(p1, type(uint256).max);
+        _usdt.approve(p2, type(uint256).max);
+
+        // Warp to ACTIVE so donations are accepted
+        vm.warp(block.timestamp + 1 days + 1);
+
+        GrantPool(p1).donate(60_000e6);
+        GrantPool(p2).donate(40_000e6);
+
+        (,, uint256 totalDeposited,,,) = factory.getProtocolStats();
+        assertEq(totalDeposited, 100_000e6);
+    }
+
+    function test_GetProtocolStats_TotalProposals_AggregatesAcrossPools() public {
+        vm.prank(creator); address p1 = factory.createPool(_params());
+        vm.prank(creator); address p2 = factory.createPool(_params());
+
+        vm.warp(block.timestamp + 1 days + 1); // ACTIVE
+
+        address ap1 = makeAddr("ap1");
+        address ap2 = makeAddr("ap2");
+        address ap3 = makeAddr("ap3");
+
+        vm.prank(ap1); GrantPool(p1).submitProposal(bytes32(uint256(1)), ap1);
+        vm.prank(ap2); GrantPool(p1).submitProposal(bytes32(uint256(2)), ap2);
+        vm.prank(ap3); GrantPool(p2).submitProposal(bytes32(uint256(3)), ap3);
+
+        (,,,,, uint256 totalProposals) = factory.getProtocolStats();
+        assertEq(totalProposals, 3);
     }
 }

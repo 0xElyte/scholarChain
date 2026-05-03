@@ -8,7 +8,7 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import {FieldDefinition} from "./Types/GrantPoolTypes.sol";
+import {FieldDefinition, PoolSummary, PoolStateEnum} from "./Types/GrantPoolTypes.sol";
 
 // SBT interface — Omoboi must match this exact signature
 interface IScholarChainSBT {
@@ -98,6 +98,7 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
     uint256 public constant UNCLAIMED_RECOVERY_DELAY = 90 days;
 
     uint256 private _claimedCount;
+    uint256 private _proposalCount;
     bool public zeroWinnerDistributed;
 
     // --- Donation accounting ---
@@ -165,8 +166,14 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         return PoolState.DISTRIBUTING;
     }
 
-    function currentState() external view returns (string memory) {
-        return _stateLabel(_state());
+    function currentState() external view returns (PoolStateEnum) {
+        return _toStateEnum(_state());
+    }
+
+    /// @dev Casts the internal PoolState to the shared PoolStateEnum.
+    ///      Both enums share the same integer values — order must stay in sync.
+    function _toStateEnum(PoolState s) internal pure returns (PoolStateEnum) {
+        return PoolStateEnum(uint8(s));
     }
 
     function _stateLabel(PoolState s) internal pure returns (string memory) {
@@ -314,6 +321,7 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         if (payoutAddr == address(0)) revert InvalidAddress();
         proposals[msg.sender] =
             Proposal({documentCID: docCID, payoutAddress: payoutAddr, submittedAt: block.timestamp, exists: true});
+        _proposalCount++;
         emit ProposalSubmitted(msg.sender, docCID);
     }
 
@@ -442,9 +450,38 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         return votes[signer][benefactor];
     }
 
+    function getProposalCount() external view returns (uint256) {
+        return _proposalCount;
+    }
+
+    function getClaimedCount() external view returns (uint256) {
+        return _claimedCount;
+    }
+
     // Returns the submission form schema — frontend uses this to render the dynamic form
     function getFieldDefinitions() external view returns (FieldDefinition[] memory) {
         return _fieldDefinitions;
+    }
+
+    /// @notice Single-call summary of this pool — use instead of individual public var reads.
+    function getPoolSummary() external view returns (PoolSummary memory) {
+        return PoolSummary({
+            poolAddress:         address(this),
+            poolName:            poolName,
+            state:               _toStateEnum(_state()),
+            creator:             creator,
+            totalDeposited:      totalDeposited,
+            submissionStart:     submissionStart,
+            submissionEnd:       submissionEnd,
+            reviewEnd:           reviewEnd,
+            signerCount:         signers.length,
+            winnersCount:        winners.length,
+            claimedCount:        _claimedCount,
+            proposalCount:       _proposalCount,
+            distributionAmount:  distributionAmount,
+            distributionEntered: distributionEntered,
+            isCancelled:         isCancelled
+        });
     }
 
     // Recover funds that winners never claimed, callable by admin after 90-day timeout.
