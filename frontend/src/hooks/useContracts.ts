@@ -1,45 +1,57 @@
 import { useMemo } from "react";
 import useRunners from "./useRunners";
-import { Contract } from "ethers";
+import { Contract, isAddress, getAddress } from "ethers";
 import GrantPoolABI from "../constants/GrantPoolABI.json";
-import { getAddress } from "ethers";
+import FactoryABI from "../constants/FactoryABI.json";
+
+function resolveAddress(address: string | undefined) {
+  if (!address || !isAddress(address)) {
+    return null;
+  }
+
+  return getAddress(address);
+}
 
 export const useGrantPoolContract = (withSigner = false) => {
   const { readOnlyProvider, signer } = useRunners();
+  const contractAddress = resolveAddress(
+    import.meta.env.VITE_GRANT_POOL_CONTRACT_ADDRESS,
+  );
 
   return useMemo(() => {
+    if (!contractAddress) {
+      return null;
+    }
+
     if (withSigner) {
       if (!signer) return null;
-      return new Contract(
-        getAddress(import.meta.env.VITE_GRANT_POOL_CONTRACT_ADDRESS),
-        GrantPoolABI,
-        signer,
-      );
+      return new Contract(contractAddress, GrantPoolABI, signer);
     }
-    return new Contract(
-      getAddress(import.meta.env.VITE_GRANT_POOL_CONTRACT_ADDRESS),
-      GrantPoolABI,
-      readOnlyProvider,
-    );
-  }, [withSigner, signer, readOnlyProvider]);
+    return new Contract(contractAddress, GrantPoolABI, readOnlyProvider);
+  }, [withSigner, signer, readOnlyProvider, contractAddress]);
 };
 
 export const useFactoryContract = (withSigner = false) => {
   const { readOnlyProvider, signer } = useRunners();
+  const contractAddress = resolveAddress(
+    import.meta.env.VITE_FACTORY_CONTRACT_ADDRESS,
+  );
 
   return useMemo(() => {
+    if (!contractAddress) {
+      return null;
+    }
+
     if (withSigner) {
       if (!signer) return null;
-      return new Contract(
-        getAddress(import.meta.env.VITE_FACTORY_CONTRACT_ADDRESS),
-        FactoryABI,
-        signer,
-      );
+      return new Contract(contractAddress, FactoryABI, signer);
     }
-    return new Contract(
-      getAddress(import.meta.env.VITE_FACTORY_CONTRACT_ADDRESS),
-      FactoryABI,
-      readOnlyProvider,
-    );
-  }, [withSigner, signer, readOnlyProvider]);
+    return new Contract(contractAddress, FactoryABI, readOnlyProvider);
+  }, [withSigner, signer, readOnlyProvider, contractAddress]);
 };
+
+export const multicallContract = new Contract{
+  import.meta.env.VITE_MULTICALL_CONTRACT_ADDRESS,
+  multicallABI,
+  readOnlyProvider,
+}

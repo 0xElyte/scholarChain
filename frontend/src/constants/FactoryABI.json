@@ -1,0 +1,601 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_treasury",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_sbtContract",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_treasuryFeeBps",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [],
+    "type": "error",
+    "name": "AccessControlBadConfirmation"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "neededRole",
+        "type": "bytes32"
+      }
+    ],
+    "type": "error",
+    "name": "AccessControlUnauthorizedAccount"
+  },
+  {
+    "inputs": [],
+    "type": "error",
+    "name": "EnforcedPause"
+  },
+  {
+    "inputs": [],
+    "type": "error",
+    "name": "ExpectedPause"
+  },
+  {
+    "inputs": [],
+    "type": "error",
+    "name": "Factory__DuplicateOrZeroSigner"
+  },
+  {
+    "inputs": [],
+    "type": "error",
+    "name": "Factory__EmptyFieldDefinitions"
+  },
+  {
+    "inputs": [],
+    "type": "error",
+    "name": "Factory__EmptyPoolName"
+  },
+  {
+    "inputs": [],
+    "type": "error",
+    "name": "Factory__InvalidFeeBps"
+  },
+  {
+    "inputs": [],
+    "type": "error",
+    "name": "Factory__NotAContract"
+  },
+  {
+    "inputs": [],
+    "type": "error",
+    "name": "Factory__ReviewDurationTooShort"
+  },
+  {
+    "inputs": [],
+    "type": "error",
+    "name": "Factory__SubmissionStartInPast"
+  },
+  {
+    "inputs": [],
+    "type": "error",
+    "name": "Factory__SubmissionWindowTooShort"
+  },
+  {
+    "inputs": [],
+    "type": "error",
+    "name": "Factory__TooFewSigners"
+  },
+  {
+    "inputs": [],
+    "type": "error",
+    "name": "Factory__TooManyFields"
+  },
+  {
+    "inputs": [],
+    "type": "error",
+    "name": "Factory__TooManySigners"
+  },
+  {
+    "inputs": [],
+    "type": "error",
+    "name": "Factory__ZeroAddress"
+  },
+  {
+    "inputs": [],
+    "type": "error",
+    "name": "Factory__ZeroCID"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address",
+        "indexed": false
+      }
+    ],
+    "type": "event",
+    "name": "Paused",
+    "anonymous": false
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "poolAddress",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "internalType": "address",
+        "name": "creator",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "internalType": "string",
+        "name": "poolName",
+        "type": "string",
+        "indexed": false
+      }
+    ],
+    "type": "event",
+    "name": "PoolCreated",
+    "anonymous": false
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32",
+        "indexed": true
+      },
+      {
+        "internalType": "bytes32",
+        "name": "previousAdminRole",
+        "type": "bytes32",
+        "indexed": true
+      },
+      {
+        "internalType": "bytes32",
+        "name": "newAdminRole",
+        "type": "bytes32",
+        "indexed": true
+      }
+    ],
+    "type": "event",
+    "name": "RoleAdminChanged",
+    "anonymous": false
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32",
+        "indexed": true
+      },
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "internalType": "address",
+        "name": "sender",
+        "type": "address",
+        "indexed": true
+      }
+    ],
+    "type": "event",
+    "name": "RoleGranted",
+    "anonymous": false
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32",
+        "indexed": true
+      },
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "internalType": "address",
+        "name": "sender",
+        "type": "address",
+        "indexed": true
+      }
+    ],
+    "type": "event",
+    "name": "RoleRevoked",
+    "anonymous": false
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newSBT",
+        "type": "address",
+        "indexed": true
+      }
+    ],
+    "type": "event",
+    "name": "SBTContractUpdated",
+    "anonymous": false
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "oldTreasury",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "internalType": "address",
+        "name": "newTreasury",
+        "type": "address",
+        "indexed": true
+      }
+    ],
+    "type": "event",
+    "name": "TreasuryUpdated",
+    "anonymous": false
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address",
+        "indexed": false
+      }
+    ],
+    "type": "event",
+    "name": "Unpaused",
+    "anonymous": false
+  },
+  {
+    "inputs": [],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "DEFAULT_ADMIN_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ]
+  },
+  {
+    "inputs": [],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "TREASURY_FEE_BPS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ]
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "struct ScholarChainFactory.CreatePoolParams",
+        "name": "p",
+        "type": "tuple",
+        "components": [
+          {
+            "internalType": "string",
+            "name": "poolName",
+            "type": "string"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "criteriaMetadataCID",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "submissionStart",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "submissionEnd",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "reviewDuration",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address[]",
+            "name": "initialSigners",
+            "type": "address[]"
+          },
+          {
+            "internalType": "address",
+            "name": "usdtTokenAddress",
+            "type": "address"
+          },
+          {
+            "internalType": "struct FieldDefinition[]",
+            "name": "fieldDefinitions",
+            "type": "tuple[]",
+            "components": [
+              {
+                "internalType": "enum FieldType",
+                "name": "fieldType",
+                "type": "uint8"
+              },
+              {
+                "internalType": "string",
+                "name": "label",
+                "type": "string"
+              },
+              {
+                "internalType": "bool",
+                "name": "required",
+                "type": "bool"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "createPool",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "poolAddress",
+        "type": "address"
+      }
+    ]
+  },
+  {
+    "inputs": [],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "getAllPools",
+    "outputs": [
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
+      }
+    ]
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "creator",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "getPoolsByCreator",
+    "outputs": [
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
+      }
+    ]
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "getRoleAdmin",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ]
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "grantRole"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "hasRole",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ]
+  },
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "pause"
+  },
+  {
+    "inputs": [],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "paused",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ]
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "callerConfirmation",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "renounceRole"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "revokeRole"
+  },
+  {
+    "inputs": [],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "sbtContract",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ]
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_newSBT",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "setSBTContract"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_newTreasury",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "setTreasury"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes4",
+        "name": "interfaceId",
+        "type": "bytes4"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "supportsInterface",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ]
+  },
+  {
+    "inputs": [],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "treasury",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ]
+  },
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "unpause"
+  }
+]

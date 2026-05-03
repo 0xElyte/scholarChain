@@ -1,11 +1,9 @@
 import { useNavigate } from "react-router-dom";
-import type { WalletState } from "../types";
-import logo from "../assets/logo.png";
-
-interface Props {
-  wallet: WalletState;
-  onConnect: () => void | Promise<void>;
-}
+import { useTotalDeposited } from "../hooks/read-hooks/useTotalDeposited";
+import { useTotalPools } from "../hooks/read-hooks/useTotalPools";
+import { useTotalProposals } from "../hooks/read-hooks/useTotalProposals";
+import { useTotalVotes } from "../hooks/read-hooks/useTotalVotes";
+import { formatUSDT } from "../utils/format";
 
 const FEATURES = [
   {
@@ -37,13 +35,6 @@ const STEPS = [
   "Reviewers vote, winners are selected, and grants are claimed on-chain.",
 ];
 
-const METRICS = [
-  { value: "$745K", label: "Mock funded volume" },
-  { value: "42", label: "Scholar proposals" },
-  { value: "16", label: "Reviewer votes" },
-  { value: "100%", label: "Verifiable flow" },
-];
-
 const SCHOLAR_PHOTO =
   "https://images.unsplash.com/photo-1758270705518-b61b40527e76?auto=format&fit=crop&w=1200&q=80";
 const REVIEW_PHOTO =
@@ -53,25 +44,24 @@ const LIBRARY_PHOTO =
 const CTA_PHOTO =
   "https://images.unsplash.com/photo-1758270705290-62b6294dd044?auto=format&fit=crop&w=1000&q=80";
 
-export function LandingPage({ wallet, onConnect }: Props) {
+export function LandingPage() {
   const navigate = useNavigate();
-
-  async function handleCTA() {
-    if (wallet.isConnected) {
-      navigate("/dashbar/dashboard");
-      return;
-    }
-
-    await onConnect();
-    navigate("/dashbar/dashboard");
-  }
+  const totalDeposited = useTotalDeposited();
+  const formattedTotal = `$${formatUSDT(totalDeposited)}`;
+  const totalPools = useTotalPools();
+  const totalProposals = useTotalProposals();
+  const totalVotes = useTotalVotes();
 
   return (
     <div className="bg-[#f7fbfb] text-slate-900">
       <section className="relative overflow-hidden border-b border-cyan-950/10 bg-[#07182b]">
         <div className="absolute inset-x-0 top-0 h-1 bg-linear-to-r from-cyan-950 via-teal-500 to-amber-400" />
         <div className="absolute inset-0">
-          <img src={SCHOLAR_PHOTO} alt="Students collaborating on scholarship work" className="h-full w-full object-cover opacity-70" />
+          <img
+            src={SCHOLAR_PHOTO}
+            alt="Students collaborating on scholarship work"
+            className="h-full w-full object-cover opacity-70"
+          />
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,24,43,0.94)_0%,rgba(7,24,43,0.78)_38%,rgba(7,24,43,0.22)_100%)]" />
           <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(7,24,43,0.88)_0%,transparent_45%)]" />
         </div>
@@ -79,35 +69,29 @@ export function LandingPage({ wallet, onConnect }: Props) {
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-[calc(100svh-4rem)] py-16 lg:py-20 flex flex-col">
           <div className="flex-1 grid lg:grid-cols-[1fr_380px] gap-10 items-end">
             <div className="max-w-4xl animate-fade-up">
-              <div className="inline-flex items-center gap-3 px-3 py-2 rounded-2xl bg-white/10 border border-white/15 shadow-sm mb-8 backdrop-blur-md">
-                <img src={logo} alt="ScholarChain logo" className="w-9 h-9 object-contain bg-white rounded-xl" />
-                <div>
-                  <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-teal-200">ScholarChain</p>
-                  <p className="text-xs text-slate-200">The on-chain scholarship grant platform</p>
-                </div>
-              </div>
-
               <h1 className="text-5xl sm:text-7xl lg:text-8xl font-black leading-[0.9] tracking-tight text-white max-w-5xl">
                 Scholarships with proof, not paperwork.
               </h1>
 
               <p className="mt-7 text-lg text-slate-200 max-w-2xl leading-relaxed">
-                Create transparent grant pools, let donors fund them with USDT, review applicants through signer votes, and distribute awards directly to scholar wallets.
+                Create transparent grant pools, let donors fund them with USDT,
+                review applicants through signer votes, and distribute awards
+                directly to scholar wallets.
               </p>
 
               <div className="mt-9 flex flex-wrap gap-3">
                 <button
-                  onClick={handleCTA}
-                  disabled={wallet.isConnecting}
-                  className="px-7 py-3.5 rounded-xl bg-teal-400 text-[#07182b] font-bold text-sm hover:bg-teal-300 hover:shadow-xl hover:shadow-black/20 hover:-translate-y-0.5 disabled:opacity-60 transition-all cursor-pointer"
-                >
-                  {wallet.isConnecting ? "Connecting..." : wallet.isConnected ? "Open Dashboard" : "Connect Wallet"}
-                </button>
-                <button
                   onClick={() => navigate("/dashbar/create")}
-                  className="px-7 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white font-bold text-sm hover:bg-white/15 hover:-translate-y-0.5 transition-all cursor-pointer backdrop-blur-md"
+                  className="px-6 py-3 rounded-xl bg-amber-400 text-[#07182b] text-sm font-bold hover:bg-amber-300 transition-all cursor-pointer"
                 >
-                  Create Grant Pool
+                  Create Pool
+                </button>
+
+                <button
+                  onClick={() => navigate("/dashbar/explore")}
+                  className="px-6 py-3 rounded-xl bg-teal-700 text-white text-sm font-bold hover:bg-teal-600 transition-all cursor-pointer"
+                >
+                  Explore Pools
                 </button>
               </div>
             </div>
@@ -116,18 +100,28 @@ export function LandingPage({ wallet, onConnect }: Props) {
               <div className="rounded-[1.75rem] bg-white/10 border border-white/15 p-4 backdrop-blur-xl shadow-2xl shadow-black/20">
                 <div className="rounded-3xl bg-white p-5">
                   <div className="flex items-center justify-between mb-5">
-                    <p className="text-xs font-bold text-slate-500">Live pool</p>
-                    <span className="rounded-full bg-teal-50 text-teal-700 border border-teal-200 px-3 py-1 text-xs font-bold">Reviewing</span>
+                    <p className="text-xs font-bold text-slate-500">
+                      Live pool
+                    </p>
+                    <span className="rounded-full bg-teal-50 text-teal-700 border border-teal-200 px-3 py-1 text-xs font-bold">
+                      Reviewing
+                    </span>
                   </div>
-                  <p className="text-2xl font-black text-[#07182b] leading-tight">Web3 Research Fellowship</p>
+                  <p className="text-2xl font-black text-[#07182b] leading-tight">
+                    Web3 Research Fellowship
+                  </p>
                   <div className="mt-6 grid grid-cols-2 gap-3">
                     <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
                       <p className="text-[11px] text-slate-500">Pool balance</p>
-                      <p className="text-2xl font-black text-[#07182b] mt-1">$120K</p>
+                      <p className="text-2xl font-black text-[#07182b] mt-1">
+                        $120K
+                      </p>
                     </div>
                     <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
                       <p className="text-[11px] text-slate-500">Quorum</p>
-                      <p className="text-2xl font-black text-[#07182b] mt-1">4 / 5</p>
+                      <p className="text-2xl font-black text-[#07182b] mt-1">
+                        4 / 5
+                      </p>
                     </div>
                   </div>
                   <div className="mt-5 h-2 rounded-full bg-slate-200 overflow-hidden">
@@ -135,7 +129,10 @@ export function LandingPage({ wallet, onConnect }: Props) {
                   </div>
                   <div className="mt-6 grid grid-cols-3 gap-2">
                     {["Fund", "Vote", "Claim"].map((item) => (
-                      <div key={item} className="rounded-xl bg-[#07182b] px-3 py-2 text-center">
+                      <div
+                        key={item}
+                        className="rounded-xl bg-[#07182b] px-3 py-2 text-center"
+                      >
                         <p className="text-[11px] text-teal-100">{item}</p>
                       </div>
                     ))}
@@ -145,23 +142,31 @@ export function LandingPage({ wallet, onConnect }: Props) {
             </div>
           </div>
 
-          <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-3">
-            {METRICS.map((metric, index) => (
-              <div key={metric.label} className={`rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-md animate-fade-up delay-${(index + 1) * 100}`}>
-                <p className="text-2xl font-black text-white">{metric.value}</p>
-                <p className="text-xs text-slate-300 mt-1">{metric.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="py-8 bg-white border-b border-cyan-950/10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-sm font-bold text-slate-400">
-            {["Ethereum", "USDT", "IPFS", "Foundry", "OpenZeppelin", "Soulbound Credentials"].map((item) => (
-              <span key={item} className="hover:text-teal-700 transition-colors">{item}</span>
-            ))}
+          <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div className="text-center">
+              <p className="text-xs text-slate-300">Total pools</p>
+              <p className="text-4xl font-black text-white mt-2">
+                {totalPools}
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-slate-300">Total funded volume</p>
+              <p className="text-4xl font-black text-white mt-2">
+                {formattedTotal}
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-slate-300">Scholar proposals</p>
+              <p className="text-4xl font-black text-white mt-2">
+                {totalProposals}
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-slate-300">Reviewer votes</p>
+              <p className="text-4xl font-black text-white mt-2">
+                {totalVotes}
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -170,32 +175,52 @@ export function LandingPage({ wallet, onConnect }: Props) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-[0.85fr_1fr] gap-12 items-start">
             <div>
-              <p className="text-xs font-extrabold text-teal-700 uppercase tracking-[0.24em] mb-4">Product Flow</p>
+              <p className="text-xs font-extrabold text-teal-700 uppercase tracking-[0.24em] mb-4">
+                Product Flow
+              </p>
               <h2 className="text-4xl lg:text-5xl font-black text-[#07182b] leading-tight">
                 One interface for creators, reviewers, donors, and scholars.
               </h2>
               <p className="mt-5 text-slate-600 leading-relaxed">
-                ScholarChain is built around the grant pool lifecycle. The UI keeps each role focused on the action they can take right now.
+                ScholarChain is built around the grant pool lifecycle. The UI
+                keeps each role focused on the action they can take right now.
               </p>
               <div className="mt-8 grid grid-cols-[0.85fr_1fr] gap-4 max-w-md">
                 <div className="scholar-card rounded-3xl overflow-hidden bg-white">
-                  <img src={LIBRARY_PHOTO} alt="Students studying in a library" className="w-full h-full min-h-52 object-cover" />
+                  <img
+                    src={LIBRARY_PHOTO}
+                    alt="Students studying in a library"
+                    className="w-full h-full min-h-52 object-cover"
+                  />
                 </div>
                 <div className="scholar-card rounded-3xl overflow-hidden bg-white">
-                  <img src={REVIEW_PHOTO} alt="Scholar reviewing grant application" className="w-full h-36 object-cover" />
-                  <p className="p-4 text-xs font-bold text-[#07182b]">Pools, votes, and grant claims stay visible from one place.</p>
+                  <img
+                    src={REVIEW_PHOTO}
+                    alt="Scholar reviewing grant application"
+                    className="w-full h-36 object-cover"
+                  />
+                  <p className="p-4 text-xs font-bold text-[#07182b]">
+                    Pools, votes, and grant claims stay visible from one place.
+                  </p>
                 </div>
               </div>
             </div>
 
             <div className="grid sm:grid-cols-2 gap-4">
               {FEATURES.map((feature) => (
-                <div key={feature.title} className="rounded-2xl scholar-card bg-white p-6 card-lift">
+                <div
+                  key={feature.title}
+                  className="rounded-2xl scholar-card bg-white p-6 card-lift"
+                >
                   <span className="inline-flex w-10 h-10 items-center justify-center rounded-xl bg-[#07182b] text-teal-200 text-xs font-black mb-5">
                     {feature.icon}
                   </span>
-                  <h3 className="font-extrabold text-[#07182b] mb-2">{feature.title}</h3>
-                  <p className="text-sm text-slate-600 leading-relaxed">{feature.desc}</p>
+                  <h3 className="font-extrabold text-[#07182b] mb-2">
+                    {feature.title}
+                  </h3>
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    {feature.desc}
+                  </p>
                 </div>
               ))}
             </div>
@@ -203,26 +228,40 @@ export function LandingPage({ wallet, onConnect }: Props) {
         </div>
       </section>
 
-      <section id="how-it-works" className="scroll-mt-24 py-20 lg:py-24 bg-[#07182b] text-white">
+      <section
+        id="how-it-works"
+        className="scroll-mt-24 py-20 lg:py-24 bg-[#07182b] text-white"
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-2 gap-14 items-center">
             <div>
-              <p className="text-xs font-extrabold text-teal-300 uppercase tracking-[0.24em] mb-4">How it works</p>
+              <p className="text-xs font-extrabold text-teal-300 uppercase tracking-[0.24em] mb-4">
+                How it works
+              </p>
               <h2 className="text-4xl lg:text-5xl font-black leading-tight">
                 From grant idea to scholar payout in four clear steps.
               </h2>
               <div className="mt-8 rounded-[1.75rem] overflow-hidden border border-white/10 shadow-2xl shadow-black/20">
-                <img src={LIBRARY_PHOTO} alt="Students studying in a modern library" className="h-64 w-full object-cover" />
+                <img
+                  src={LIBRARY_PHOTO}
+                  alt="Students studying in a modern library"
+                  className="h-64 w-full object-cover"
+                />
               </div>
             </div>
 
             <div className="space-y-4">
               {STEPS.map((step, index) => (
-                <div key={step} className="flex gap-4 rounded-2xl border border-white/10 bg-white/[0.06] p-5">
+                <div
+                  key={step}
+                  className="flex gap-4 rounded-2xl border border-white/10 bg-white/[0.06] p-5"
+                >
                   <span className="shrink-0 w-9 h-9 rounded-xl bg-teal-400 text-[#07182b] flex items-center justify-center text-sm font-black">
                     {index + 1}
                   </span>
-                  <p className="text-sm text-slate-200 leading-relaxed pt-1">{step}</p>
+                  <p className="text-sm text-slate-200 leading-relaxed pt-1">
+                    {step}
+                  </p>
                 </div>
               ))}
             </div>
@@ -235,20 +274,32 @@ export function LandingPage({ wallet, onConnect }: Props) {
           <div className="rounded-[2rem] scholar-card-strong overflow-hidden">
             <div className="grid md:grid-cols-[0.7fr_1fr]">
               <div className="relative min-h-72 overflow-hidden">
-                <img src={CTA_PHOTO} alt="Students collaborating around a laptop" className="absolute inset-0 h-full w-full object-cover" />
+                <img
+                  src={CTA_PHOTO}
+                  alt="Students collaborating around a laptop"
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
                 <div className="absolute inset-0 bg-linear-to-br from-[#07182b]/70 to-teal-700/30" />
                 <div className="absolute left-6 bottom-6 right-6 rounded-2xl bg-white/90 p-4 shadow-xl">
-                  <p className="text-xs font-bold text-teal-700 uppercase tracking-[0.18em]">Transparent grants</p>
-                  <p className="mt-1 text-2xl font-black text-[#07182b]">$120K pooled</p>
+                  <p className="text-xs font-bold text-teal-700 uppercase tracking-[0.18em]">
+                    Transparent grants
+                  </p>
+                  <p className="mt-1 text-2xl font-black text-[#07182b]">
+                    {formattedTotal} pooled
+                  </p>
                 </div>
               </div>
               <div className="p-8 sm:p-10">
-                <p className="text-xs font-extrabold text-amber-600 uppercase tracking-[0.24em] mb-4">Start building</p>
+                <p className="text-xs font-extrabold text-amber-600 uppercase tracking-[0.24em] mb-4">
+                  Start building
+                </p>
                 <h2 className="text-3xl sm:text-4xl font-black text-[#07182b] leading-tight mb-4">
                   Launch a verifiable scholarship program.
                 </h2>
                 <p className="text-slate-600 leading-relaxed mb-8">
-                  Explore existing grant pools, create a new pool for your community, or connect your wallet to manage applications and claims.
+                  Explore existing grant pools, create a new pool for your
+                  community, or connect your wallet to manage applications and
+                  claims.
                 </p>
                 <div className="flex flex-wrap gap-3">
                   <button
