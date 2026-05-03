@@ -28,25 +28,30 @@ export interface GrantPool {
   reviewEnd: number;
   creator: string;
   treasury: string;
-  totalDeposited: string;
-  distributionAmount: string;
+  totalDeposited: string;       // raw wei-like string (6-decimal USDT)
+  distributionAmount: string;   // raw wei-like string (6-decimal USDT)
   state: PoolState;
-  signers: string[];
-  winners: string[];
+  signers: string[];            // full list (populated on detail); partial on cards
+  winners: string[];            // full list (populated on detail)
   fieldDefinitions: FieldDefinition[];
   isCancelled: boolean;
   distributionEntered: boolean;
   createdAt: number;
+  // Counts from PoolSummary (avoid N fetches on list pages)
+  signerCount: number;
+  winnersCount: number;
+  proposalCount: number;
 }
 
-export interface Proposal {
+export interface ChainProposal {
   benefactor: string;
-  documentCID: string;
+  documentCID: string;        // decoded from bytes32
   payoutAddress: string;
   submittedAt: number;
   approvalCount: number;
   isWinner: boolean;
   hasClaimed: boolean;
+  hasVotedOnThis: boolean;    // true if connected signer already voted
 }
 
 export interface WalletState {
