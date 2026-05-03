@@ -1,9 +1,6 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import type { UserRole } from "../types";
-import { FieldType } from "../types";
-import { MOCK_POOLS, MOCK_PROPOSALS } from "../data/mockData";
-import { StatusBadge } from "../components/StatusBadge";
 import { Modal } from "../components/Modal";
 import {
   formatUSDT,
@@ -12,11 +9,12 @@ import {
   timeRemaining,
 } from "../utils/format";
 import { useWalletContext } from "../connection/WalletContext";
+import { usePoolDetails } from "../hooks/read-hooks/usePoolDetails";
 
 export function PoolDetailPage() {
   const { wallet } = useWalletContext();
   const { address } = useParams<{ address: string }>();
-  const pool = MOCK_POOLS.find((p) => p.address === address);
+  const { poolData: pool, loading, error } = usePoolDetails(address);
 
   const [donateModal, setDonateModal] = useState(false);
   const [proposeModal, setProposeModal] = useState(false);
@@ -25,9 +23,22 @@ export function PoolDetailPage() {
   const [payoutAddr, setPayoutAddr] = useState("");
   const [txPending, setTxPending] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [voteTarget, setVoteTarget] = useState<string | null>(null);
 
-  if (!pool) {
+  if (loading) {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-24 text-center">
+        <p className="text-4xl mb-4">⏳</p>
+        <h2 className="text-xl font-semibold text-slate-800 mb-2">
+          Loading pool details…
+        </h2>
+        <p className="text-slate-500 text-sm">
+          Fetching data from the blockchain.
+        </p>
+      </div>
+    );
+  }
+
+  if (error || !pool) {
     return (
       <div className="max-w-lg mx-auto px-4 py-24 text-center">
         <p className="text-5xl mb-4">❓</p>
@@ -35,7 +46,9 @@ export function PoolDetailPage() {
           Pool not found
         </h2>
         <p className="text-slate-500 text-sm mb-6">
-          This address doesn't match any known pool.
+          {error
+            ? `Error: ${error}`
+            : "This address doesn't match any known pool."}
         </p>
         <Link
           to="/dashbar/explore"
@@ -50,28 +63,21 @@ export function PoolDetailPage() {
   const addr = wallet.address?.toLowerCase();
   const isCreator = addr === pool.creator.toLowerCase();
   const isSigner = pool.signers.some((s) => s.toLowerCase() === addr);
-  const myProposal = MOCK_PROPOSALS.find(
-    (p) => p.benefactor.toLowerCase() === addr,
-  );
   const isWinner = pool.winners.some((w) => w.toLowerCase() === addr);
 
   const roles: UserRole[] = [];
   if (isCreator) roles.push("creator");
   if (isSigner) roles.push("signer");
   if (isWinner) roles.push("winner");
-  if (myProposal && !isWinner) roles.push("applicant");
 
   const quorum = Math.ceil((pool.signers.length * 70) / 100);
   const canDonate = pool.state === "PENDING" || pool.state === "ACTIVE";
-  const canSubmit =
-    pool.state === "ACTIVE" && !myProposal && wallet.isConnected;
-  const canVote =
-    isSigner && (pool.state === "ACTIVE" || pool.state === "REVIEW");
+  const canSubmit = pool.state === "ACTIVE" && wallet.isConnected;
   const canDistribute =
     pool.state === "DISTRIBUTING" && !pool.distributionEntered;
   const canClaim = pool.state === "DISTRIBUTING" && isWinner;
   const canRefund =
-    pool.state === "CANCELLED" ||
+    pool.isCancelled ||
     (pool.state === "DISTRIBUTING" && pool.winners.length === 0);
   const canCancel = isCreator && pool.state === "PENDING";
 
@@ -118,7 +124,9 @@ export function PoolDetailPage() {
       {/* Header */}
       <div className="mb-6">
         <div className="flex flex-wrap items-center gap-2 mb-3">
-          <StatusBadge state={pool.state} />
+          <div className="px-2.5 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+            {pool.state}
+          </div>
           {roles.map((r) => (
             <span
               key={r}
@@ -135,7 +143,8 @@ export function PoolDetailPage() {
           Created by{" "}
           <span className="font-mono">{shortAddr(pool.creator)}</span>
           {" · "}
-          Contract <span className="font-mono">{shortAddr(pool.address)}</span>
+          Contract{" "}
+          <span className="font-mono">{shortAddr(pool.poolAddress)}</span>
         </p>
       </div>
 
@@ -268,16 +277,16 @@ export function PoolDetailPage() {
                 >
                   <span
                     className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-                      f.fieldType === FieldType.TEXT
+                      f.fieldType === 0
                         ? "bg-slate-100 text-slate-600 border-slate-300"
-                        : f.fieldType === FieldType.URL
+                        : f.fieldType === 1
                           ? "bg-teal-50 text-teal-700 border-teal-200"
                           : "bg-teal-50 text-teal-700 border-teal-200"
                     }`}
                   >
-                    {f.fieldType === FieldType.TEXT
+                    {f.fieldType === 0
                       ? "Text"
-                      : f.fieldType === FieldType.URL
+                      : f.fieldType === 1
                         ? "URL"
                         : "Upload"}
                   </span>
@@ -299,139 +308,35 @@ export function PoolDetailPage() {
             pool.state === "REVIEW" ||
             pool.state === "DISTRIBUTING" ||
             pool.state === "CLOSED") && (
-            <Card title={`Proposals (${MOCK_PROPOSALS.length})`}>
-              {MOCK_PROPOSALS.length === 0 ? (
-                <p className="text-sm text-slate-500">
-                  No proposals submitted yet.
+            <Card title="Proposals">
+              <div className="p-4 rounded-lg bg-blue-50 border border-blue-200">
+                <p className="text-sm text-blue-700">
+                  💡 Proposals are indexed from blockchain events. To view
+                  detailed proposals, connect to a subgraph or use The Graph
+                  Network once deployed.
                 </p>
-              ) : (
-                <div className="space-y-4">
-                  {MOCK_PROPOSALS.map((prop) => (
-                    <div
-                      key={prop.benefactor}
-                      className="scholar-card rounded-xl p-4"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-800 font-mono">
-                            {shortAddr(prop.benefactor)}
-                          </p>
-                          <p className="text-xs text-slate-400 mt-0.5">
-                            Submitted {formatDate(prop.submittedAt * 1000)} ·
-                            CID:{" "}
-                            <span className="font-mono">
-                              {prop.documentCID.slice(0, 18)}…
-                            </span>
-                          </p>
-                        </div>
-                        {prop.isWinner && (
-                          <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 font-medium">
-                            🏆 Winner
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Vote progress */}
-                      <div className="mb-3">
-                        <div className="flex justify-between text-xs text-slate-500 mb-1">
-                          <span>
-                            {prop.approvalCount} approval
-                            {prop.approvalCount !== 1 ? "s" : ""}
-                          </span>
-                          <span>{quorum} needed</span>
-                        </div>
-                        <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-teal-600 rounded-full transition-all"
-                            style={{
-                              width: `${Math.min(100, (prop.approvalCount / quorum) * 100)}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Vote buttons */}
-                      {canVote && !prop.isWinner && (
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          {voteTarget === prop.benefactor ? (
-                            <>
-                              <button
-                                onClick={() => {
-                                  stub(
-                                    `Voted Approve for ${shortAddr(prop.benefactor)}`,
-                                  );
-                                  setVoteTarget(null);
-                                }}
-                                disabled={txPending}
-                                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
-                              >
-                                ✓ Approve
-                              </button>
-                              <button
-                                onClick={() => {
-                                  stub(
-                                    `Voted Reject for ${shortAddr(prop.benefactor)}`,
-                                  );
-                                  setVoteTarget(null);
-                                }}
-                                disabled={txPending}
-                                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-60 cursor-pointer"
-                              >
-                                ✗ Reject
-                              </button>
-                              <button
-                                onClick={() => setVoteTarget(null)}
-                                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 cursor-pointer"
-                              >
-                                Cancel
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              onClick={() => setVoteTarget(prop.benefactor)}
-                              className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-teal-300 text-teal-700 hover:bg-teal-50 cursor-pointer"
-                            >
-                              Cast Vote
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+              </div>
             </Card>
           )}
 
-          {/* My proposal */}
-          {myProposal && (
-            <Card title="Your Proposal" highlight>
+          {/* My proposal placeholder */}
+          {isWinner && (
+            <Card title="Your Proposal Status" highlight>
               <div className="grid sm:grid-cols-2 gap-3">
-                {[
-                  {
-                    l: "Document CID",
-                    v: `${myProposal.documentCID.slice(0, 22)}…`,
-                  },
-                  {
-                    l: "Payout Address",
-                    v: shortAddr(myProposal.payoutAddress),
-                  },
-                  {
-                    l: "Approvals",
-                    v: `${myProposal.approvalCount} / ${quorum}`,
-                  },
-                  {
-                    l: "Status",
-                    v: myProposal.isWinner ? "🏆 Winner" : "⏳ Under Review",
-                  },
-                ].map(({ l, v }) => (
-                  <div key={l} className="bg-teal-50 rounded-lg p-3">
-                    <p className="text-xs text-teal-600 mb-0.5">{l}</p>
-                    <p className="text-sm font-semibold text-teal-900 font-mono">
-                      {v}
-                    </p>
-                  </div>
-                ))}
+                <div className="bg-teal-50 rounded-lg p-3">
+                  <p className="text-xs text-teal-600 mb-0.5">Status</p>
+                  <p className="text-sm font-semibold text-teal-900">
+                    🏆 Winner
+                  </p>
+                </div>
+                <div className="bg-emerald-50 rounded-lg p-3">
+                  <p className="text-xs text-emerald-600 mb-0.5">
+                    Claimable Amount
+                  </p>
+                  <p className="text-sm font-semibold text-emerald-900 font-mono">
+                    {formatUSDT(pool.distributionAmount)} USDT
+                  </p>
+                </div>
               </div>
             </Card>
           )}
@@ -488,7 +393,7 @@ export function PoolDetailPage() {
 
           <Card title="Contract">
             <p className="text-xs font-mono text-slate-600 break-all">
-              {pool.address}
+              {pool.poolAddress}
             </p>
           </Card>
         </div>

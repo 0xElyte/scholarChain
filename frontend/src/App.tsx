@@ -21,7 +21,6 @@ import { WalletProvider, useWalletContext } from "./connection/WalletContext";
 function PublicLayout() {
   return (
     <div className="flex flex-col min-h-screen">
-      <Navbar />
       <main className="flex-1">
         <Outlet />
       </main>
@@ -46,6 +45,7 @@ function App() {
       <AppkitWrapper>
         <WalletProvider>
           <div className="min-h-screen scholar-page flex flex-col">
+            <Navbar />
             <HashScroll />
             <Routes>
               <Route element={<PublicLayout />}>

@@ -1,8 +1,12 @@
 import { Link } from "react-router-dom";
-import { MOCK_POOLS, MOCK_STATS } from "../data/mockData";
+import { MOCK_POOLS } from "../data/mockData";
 import { PoolCard } from "../components/PoolCard";
 import { formatUSDT } from "../utils/format";
 import { useWalletContext } from "../connection/WalletContext";
+import { useTotalPools } from "../hooks/read-hooks/useTotalPools";
+import { useTotalDeposited } from "../hooks/read-hooks/useTotalDeposited";
+import { useActivePools } from "../hooks/read-hooks/useActivePools";
+import { usePaidScholarStats } from "../hooks/read-hooks/usePaidScholarStats";
 
 const DASHBOARD_PHOTO =
   "https://images.unsplash.com/photo-1764213077313-41b4dc822d8c?auto=format&fit=crop&w=900&q=80";
@@ -10,6 +14,10 @@ const DASHBOARD_PHOTO =
 export function DashboardPage() {
   const { wallet } = useWalletContext();
   const addr = wallet.address?.toLowerCase();
+  const totalPools = useTotalPools();
+  const activePoolsCount = useActivePools();
+  const totalDeposited = useTotalDeposited();
+  const paidScholarStats = usePaidScholarStats();
 
   const myCreated = MOCK_POOLS.filter((p) => p.creator.toLowerCase() === addr);
   const mySigning = MOCK_POOLS.filter((p) =>
@@ -17,9 +25,6 @@ export function DashboardPage() {
   );
   const pendingVotes = mySigning.filter(
     (p) => p.state === "ACTIVE" || p.state === "REVIEW",
-  );
-  const activePools = MOCK_POOLS.filter(
-    (p) => p.state === "ACTIVE" || p.state === "PENDING",
   );
 
   return (
@@ -60,26 +65,26 @@ export function DashboardPage() {
         {[
           {
             label: "Total Pools",
-            value: MOCK_STATS.totalPools,
+            value: totalPools,
             sub: "across all creators",
             color: "text-slate-800",
           },
           {
             label: "Active Right Now",
-            value: MOCK_STATS.activePools,
+            value: activePoolsCount,
             sub: "accepting proposals",
             color: "text-teal-700",
           },
           {
             label: "Total Value",
-            value: `$${formatUSDT(MOCK_STATS.totalFunded)}`,
+            value: `$${formatUSDT(totalDeposited)}`,
             sub: "USDT deposited",
             color: "text-amber-600",
           },
           {
             label: "Scholars Funded",
-            value: MOCK_STATS.totalWinners,
-            sub: `$${formatUSDT(MOCK_STATS.totalGrantsClaimed)} claimed`,
+            value: paidScholarStats.totalPaidScholars,
+            sub: `$${formatUSDT(paidScholarStats.totalPaidAmount)} claimed`,
             color: "text-emerald-600",
           },
         ].map(({ label, value, sub, color }) => (
@@ -211,13 +216,13 @@ export function DashboardPage() {
       </section>
 
       {/* Apply CTA */}
-      {activePools.length > 0 && (
+      {Number(activePoolsCount) > 0 && (
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-6 rounded-2xl bg-[#07182b] text-white shadow-2xl shadow-cyan-950/20">
           <div className="flex-1">
             <p className="font-semibold text-lg">
-              {activePools.length} pool
-              {activePools.length > 1 ? "s are" : " is"} currently accepting
-              applications
+              {activePoolsCount} pool
+              {Number(activePoolsCount) > 1 ? "s are" : " is"} currently
+              accepting applications
             </p>
             <p className="text-teal-100 text-sm mt-0.5">
               Submit your proposal before the deadline.

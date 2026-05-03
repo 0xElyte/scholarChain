@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useTotalDeposited } from "../hooks/read-hooks/useTotalDeposited";
+import { useTotalPools } from "../hooks/read-hooks/useTotalPools";
 import { useTotalProposals } from "../hooks/read-hooks/useTotalProposals";
 import { useTotalVotes } from "../hooks/read-hooks/useTotalVotes";
 import { formatUSDT } from "../utils/format";
@@ -47,6 +48,7 @@ export function LandingPage() {
   const navigate = useNavigate();
   const totalDeposited = useTotalDeposited();
   const formattedTotal = `$${formatUSDT(totalDeposited)}`;
+  const totalPools = useTotalPools();
   const totalProposals = useTotalProposals();
   const totalVotes = useTotalVotes();
 
@@ -140,7 +142,13 @@ export function LandingPage() {
             </div>
           </div>
 
-          <div className="mt-12 grid sm:grid-cols-3 gap-8">
+          <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div className="text-center">
+              <p className="text-xs text-slate-300">Total pools</p>
+              <p className="text-4xl font-black text-white mt-2">
+                {totalPools}
+              </p>
+            </div>
             <div className="text-center">
               <p className="text-xs text-slate-300">Total funded volume</p>
               <p className="text-4xl font-black text-white mt-2">
@@ -162,7 +170,6 @@ export function LandingPage() {
           </div>
         </div>
       </section>
-
 
       <section id="features" className="scroll-mt-24 py-20 lg:py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

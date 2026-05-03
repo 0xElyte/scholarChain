@@ -1,25 +1,8 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
 import ConnectButton from "./connectionButton";
 import { useWalletContext } from "../connection/WalletContext";
-
-function EthIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 256 417" fill="none">
-      <path
-        d="M127.9 0L125.2 9.1V285.2L127.9 287.9L255.7 212.9L127.9 0Z"
-        fill="#627EEA"
-      />
-      <path d="M127.9 0L0 212.9L127.9 287.9V154.1V0Z" fill="#8197EE" />
-      <path
-        d="M127.9 312.2L126.3 314.1V412.2L127.9 417L255.8 237.2L127.9 312.2Z"
-        fill="#627EEA"
-      />
-      <path d="M127.9 417V312.2L0 237.2L127.9 417Z" fill="#8197EE" />
-    </svg>
-  );
-}
 
 const NAV_LINKS = [
   { to: "/#how-it-works", label: "How it works" },
@@ -30,7 +13,9 @@ const NAV_LINKS = [
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { wallet } = useWalletContext();
+  const showPublicLinks = pathname === "/";
 
   return (
     <nav className="fixed top-0 inset-x-0 z-50 bg-white/95 backdrop-blur-xl border-b border-cyan-950/10 shadow-sm">
@@ -50,22 +35,22 @@ export function Navbar() {
         </Link>
 
         {/* Desktop nav */}
-        <div className="hidden md:flex items-center gap-1 flex-1 justify-center">
-          {NAV_LINKS.map(({ to, label }) => (
-            <Link
-              key={to}
-              to={to}
-              className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all duration-200"
-            >
-              {label}
-            </Link>
-          ))}
-        </div>
+        {showPublicLinks && (
+          <div className="hidden md:flex items-center gap-1 flex-1 justify-center">
+            {NAV_LINKS.map(({ to, label }) => (
+              <Link
+                key={to}
+                to={to}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all duration-200"
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
+        )}
 
         {/* Right side */}
         <div className="flex items-center gap-3 shrink-0">
-    
-
           <ConnectButton />
 
           {/* Hamburger */}
@@ -90,16 +75,17 @@ export function Navbar() {
       {/* Mobile dropdown */}
       {mobileOpen && (
         <div className="md:hidden bg-white border-t border-slate-100 px-4 py-3 space-y-1 animate-fade-up shadow-lg">
-          {NAV_LINKS.map(({ to, label }) => (
-            <Link
-              key={to}
-              to={to}
-              onClick={() => setMobileOpen(false)}
-              className="block px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50"
-            >
-              {label}
-            </Link>
-          ))}
+          {showPublicLinks &&
+            NAV_LINKS.map(({ to, label }) => (
+              <Link
+                key={to}
+                to={to}
+                onClick={() => setMobileOpen(false)}
+                className="block px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50"
+              >
+                {label}
+              </Link>
+            ))}
           {wallet.isConnected && (
             <button
               onClick={() => {

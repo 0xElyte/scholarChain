@@ -1,11 +1,11 @@
 import { createAppKit } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
-import { liskSepolia, type AppKitNetwork } from "@reown/appkit/networks";
+import { sepolia , type AppKitNetwork } from "@reown/appkit/networks";
 import type { ReactNode } from "react";
 
 const projectId = import.meta.env.VITE_PROJECT_ID;
 
-const networks: [AppKitNetwork, ...AppKitNetwork[]] = [liskSepolia];
+const networks: [AppKitNetwork, ...AppKitNetwork[]] = [sepolia];
 
 const metadata = {
   name: "ScholarChain",

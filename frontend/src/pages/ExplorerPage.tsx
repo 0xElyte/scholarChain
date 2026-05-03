@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
-import type { PoolState } from "../types";
-import { MOCK_POOLS } from "../data/mockData";
+import type { PoolState, GrantPool } from "../types";
 import { PoolCard } from "../components/PoolCard";
 import { useWalletContext } from "../connection/WalletContext";
+import { useAllPools } from "../hooks/read-hooks/useAllPools";
 
 const STATE_FILTERS: { label: string; value: PoolState | "ALL" }[] = [
   { label: "All", value: "ALL" },
@@ -24,31 +24,44 @@ export function ExplorerPage() {
   const [sortBy, setSortBy] = useState<"newest" | "largest" | "ending">(
     "newest",
   );
+  const { pools: allPools, loading, error } = useAllPools();
+
+  // Map contract data to GrantPool interface for PoolCard compatibility
+  const pools: GrantPool[] = allPools.map((p) => ({
+    ...p,
+    state: p.state as PoolState,
+    treasury: "", // Not available from getAllPools
+    fieldDefinitions: [], // Would need separate call, populated by usePoolDetails
+    isCancelled: p.state === "CANCELLED",
+    distributionEntered: false, // Not available from contract
+    createdAt: p.submissionStart, // Use submissionStart as creation timestamp
+  }));
 
   const filtered = useMemo(() => {
-    let pools = [...MOCK_POOLS];
+    let result = [...pools];
     if (stateFilter !== "ALL")
-      pools = pools.filter((p) => p.state === stateFilter);
+      result = result.filter((p) => p.state === stateFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
-      pools = pools.filter(
+      result = result.filter(
         (p) =>
           p.poolName.toLowerCase().includes(q) ||
           p.creator.toLowerCase().includes(q),
       );
     }
-    if (sortBy === "newest") pools.sort((a, b) => b.createdAt - a.createdAt);
+    if (sortBy === "newest")
+      result.sort((a, b) => b.submissionStart - a.submissionStart);
     if (sortBy === "largest")
-      pools.sort(
+      result.sort(
         (a, b) => parseFloat(b.totalDeposited) - parseFloat(a.totalDeposited),
       );
     if (sortBy === "ending") {
       const now = Math.floor(Date.now() / 1000);
-      pools = pools.filter((p) => p.submissionEnd > now);
-      pools.sort((a, b) => a.submissionEnd - b.submissionEnd);
+      result = result.filter((p) => p.submissionEnd > now);
+      result.sort((a, b) => a.submissionEnd - b.submissionEnd);
     }
-    return pools;
-  }, [search, stateFilter, sortBy]);
+    return result;
+  }, [pools, search, stateFilter, sortBy]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -63,8 +76,8 @@ export function ExplorerPage() {
               Grant Pool Explorer
             </h1>
             <p className="text-sm text-slate-500 mt-2 max-w-xl">
-              Browse {MOCK_POOLS.length} scholarship pools, compare funding
-              state, and find open opportunities for scholars or donors.
+              Browse {loading ? "..." : pools.length} scholarship pools, compare
+              funding state, and find open opportunities for scholars or donors.
             </p>
           </div>
           <img
@@ -126,7 +139,30 @@ export function ExplorerPage() {
       </div>
 
       {/* Results */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-20">
+          <p className="text-slate-700 mb-2">Loading pools...</p>
+          <div className="flex justify-center gap-1">
+            <span className="inline-block w-2 h-2 bg-teal-500 rounded-full animate-bounce"></span>
+            <span className="inline-block w-2 h-2 bg-teal-500 rounded-full animate-bounce delay-100"></span>
+            <span className="inline-block w-2 h-2 bg-teal-500 rounded-full animate-bounce delay-200"></span>
+          </div>
+        </div>
+      ) : error ? (
+        <div className="text-center py-20">
+          <p className="text-4xl mb-4">⚠️</p>
+          <h3 className="text-lg font-semibold text-slate-700 mb-2">
+            Failed to Load Pools
+          </h3>
+          <p className="text-slate-500 text-sm mb-6">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 text-sm font-medium rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-colors cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="text-center py-20">
           <p className="text-4xl mb-4">🔎</p>
           <h3 className="text-lg font-semibold text-slate-700 mb-2">

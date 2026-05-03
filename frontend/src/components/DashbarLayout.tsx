@@ -1,6 +1,5 @@
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import logo from "../assets/logo.png";
-import { useWalletContext } from "../connection/WalletContext";
 
 const DASH_LINKS = [
   { to: "/dashbar/dashboard", label: "Dashboard", icon: "D" },
@@ -9,18 +8,10 @@ const DASH_LINKS = [
 ];
 
 export function DashbarLayout() {
-  const navigate = useNavigate();
-  const { wallet, shortAddress, disconnect } = useWalletContext();
-
-  function handleDisconnect() {
-    void disconnect();
-    navigate("/");
-  }
-
   return (
-    <div className="min-h-screen bg-[#eef6f4]">
+    <div className="min-h-screen bg-[#eef6f4] pt-16">
       <div className="mx-auto flex max-w-[1440px]">
-        <aside className="sticky top-0 hidden h-screen w-72 shrink-0 border-r border-cyan-950/10 bg-white/90 p-5 backdrop-blur-xl lg:block">
+        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-72 shrink-0 border-r border-cyan-950/10 bg-white/90 p-5 backdrop-blur-xl lg:block">
           <Link
             to="/"
             className="mb-8 flex items-center gap-3 rounded-2xl border border-cyan-950/10 bg-white p-3 shadow-sm"
@@ -58,30 +49,10 @@ export function DashbarLayout() {
               </NavLink>
             ))}
           </nav>
-
-          <div className="absolute bottom-5 left-5 right-5 rounded-2xl border border-cyan-950/10 bg-[#f7fbfb] p-4">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
-              Wallet
-            </p>
-            <p className="mt-2 font-mono text-sm font-bold text-[#07182b]">
-              {shortAddress ?? "Not connected"}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">{wallet.balance} USDT</p>
-            {wallet.isConnected && (
-              <button
-                onClick={handleDisconnect}
-                className="mt-4 w-full rounded-xl border border-cyan-950/10 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
-              >
-                Disconnect
-              </button>
-            )}
-
-         
-          </div>
         </aside>
 
         <div className="min-w-0 flex-1">
-          <div className="sticky top-0 z-30 border-b border-cyan-950/10 bg-white/95 px-4 py-3 backdrop-blur-xl lg:hidden">
+          <div className="sticky top-16 z-30 border-b border-cyan-950/10 bg-white/95 px-4 py-3 backdrop-blur-xl lg:hidden">
             <div className="flex gap-2 overflow-x-auto">
               {DASH_LINKS.map((item) => (
                 <NavLink
