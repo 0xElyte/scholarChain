@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/access/IAccessControl.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import {GrantPool, GrantPoolParams} from "./GrantPool.sol";
-import {FieldDefinition} from "./Types/GrantPoolTypes.sol";
+import {FieldDefinition, PoolSummary, PoolStateEnum} from "./Types/GrantPoolTypes.sol";
 
 // Custom errors
 error Factory__ZeroAddress();
@@ -139,6 +139,50 @@ contract ScholarChainFactory is AccessControl, Pausable {
 
     function getPoolsByCreator(address creator) external view returns (address[] memory) {
         return _poolsByCreator[creator];
+    }
+
+    function getTotalPoolCount() external view returns (uint256) {
+        return _allPools.length;
+    }
+
+    /// @notice Returns a PoolSummary for every deployed pool in one eth_call.
+    ///         Powers the Explorer page and Dashboard pool lists.
+    function getAllPoolSummaries() external view returns (PoolSummary[] memory summaries) {
+        uint256 len = _allPools.length;
+        summaries = new PoolSummary[](len);
+        for (uint256 i = 0; i < len; i++) {
+            summaries[i] = GrantPool(_allPools[i]).getPoolSummary();
+        }
+    }
+
+    /// @notice Aggregates protocol-wide stats in one eth_call.
+    ///         Powers the Dashboard stats grid and Landing page metrics.
+    function getProtocolStats()
+        external
+        view
+        returns (
+            uint256 totalPools,
+            uint256 activePools,
+            uint256 totalDeposited,
+            uint256 totalWinners,
+            uint256 totalGrantsClaimed,
+            uint256 totalProposals
+        )
+    {
+        totalPools = _allPools.length;
+        for (uint256 i = 0; i < totalPools; i++) {
+            PoolSummary memory s = GrantPool(_allPools[i]).getPoolSummary();
+            if (
+                s.state == PoolStateEnum.ACTIVE ||
+                s.state == PoolStateEnum.PENDING
+            ) {
+                activePools++;
+            }
+            totalDeposited    += s.totalDeposited;
+            totalWinners      += s.winnersCount;
+            totalGrantsClaimed += s.claimedCount * s.distributionAmount;
+            totalProposals    += s.proposalCount;
+        }
     }
 
     // Internal 

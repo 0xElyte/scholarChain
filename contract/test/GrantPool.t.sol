@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
 import {GrantPool, GrantPoolParams} from "../src/GrantPool.sol";
-import {FieldDefinition} from "../src/Types/GrantPoolTypes.sol";
+import {FieldDefinition, PoolStateEnum, PoolSummary} from "../src/Types/GrantPoolTypes.sol";
 import {MockERC20, MockSBT, Fixtures} from "./Helpers.sol";
 
 // File-scoped custom errors from GrantPool.sol
@@ -238,30 +238,30 @@ contract GrantPoolTest is Test {
     
 
     function test_State_InitiallyPending() public {
-        assertEq(pool.currentState(), "PENDING");
+        assertEq(uint8(pool.currentState()), uint8(PoolStateEnum.PENDING));
     }
 
     function test_State_ActiveAfterStart() public {
         _inActive();
-        assertEq(pool.currentState(), "ACTIVE");
+        assertEq(uint8(pool.currentState()), uint8(PoolStateEnum.ACTIVE));
     }
 
     function test_State_ReviewAfterSubmissionEnd() public {
         _inReview();
-        assertEq(pool.currentState(), "REVIEW");
+        assertEq(uint8(pool.currentState()), uint8(PoolStateEnum.REVIEW));
     }
 
     function test_State_DistributingAfterReviewEnd() public {
         _inDist();
-        assertEq(pool.currentState(), "DISTRIBUTING");
+        assertEq(uint8(pool.currentState()), uint8(PoolStateEnum.DISTRIBUTING));
     }
 
     function test_State_CancelledOverridesAll() public {
         vm.prank(creator);
         pool.cancelPool();
-        assertEq(pool.currentState(), "CANCELLED");
+        assertEq(uint8(pool.currentState()), uint8(PoolStateEnum.CANCELLED));
         _inActive();
-        assertEq(pool.currentState(), "CANCELLED");
+        assertEq(uint8(pool.currentState()), uint8(PoolStateEnum.CANCELLED));
     }
 
     
@@ -583,7 +583,7 @@ contract GrantPoolTest is Test {
         assertEq(pool.zeroWinnerDistributed(), true);
         assertEq(pool.distributionAmount(),    0);
         assertEq(usdt.balanceOf(treasury),     1_000e6); // fee only
-        assertEq(pool.currentState(),          "CLOSED");
+        assertEq(uint8(pool.currentState()),          uint8(PoolStateEnum.CLOSED));
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -631,7 +631,7 @@ contract GrantPoolTest is Test {
         // treasury received fee + dust
         uint256 treasuryAfter = usdt.balanceOf(treasury);
         assertTrue(treasuryAfter > treasuryBefore);
-        assertEq(pool.currentState(), "CLOSED");
+        assertEq(uint8(pool.currentState()), uint8(PoolStateEnum.CLOSED));
     }
 
     function test_ClaimGrant_RevertIfNotWinner() public {
@@ -819,5 +819,125 @@ contract GrantPoolTest is Test {
         assertEq(pool.getApprovalCount(applicant), 0);
         _voteAll(applicant, true, 3);
         assertEq(pool.getApprovalCount(applicant), 3);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // GET PROPOSAL COUNT
+    // ══════════════════════════════════════════════════════════════════════════
+
+    function test_GetProposalCount_ZeroInitially() public {
+        assertEq(pool.getProposalCount(), 0);
+    }
+
+    function test_GetProposalCount_IncrementsOnSubmit() public {
+        _inActive();
+        _submit(applicant);
+        assertEq(pool.getProposalCount(), 1);
+    }
+
+    function test_GetProposalCount_MultipleSubmissions() public {
+        _inActive();
+        _submit(applicant);
+        _submit(applicant2);
+        _submit(applicant3);
+        assertEq(pool.getProposalCount(), 3);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // GET CLAIMED COUNT
+    // ══════════════════════════════════════════════════════════════════════════
+
+    function test_GetClaimedCount_ZeroInitially() public {
+        assertEq(pool.getClaimedCount(), 0);
+    }
+
+    function test_GetClaimedCount_IncrementsOnClaim() public {
+        _reachDistribution(10_000e6, 1);
+        address winner = pool.getWinners()[0];
+        vm.prank(winner);
+        pool.claimGrant();
+        assertEq(pool.getClaimedCount(), 1);
+    }
+
+    function test_GetClaimedCount_MultipleWinners() public {
+        _reachDistribution(30_000e6, 3);
+        address[] memory w = pool.getWinners();
+        vm.prank(w[0]); pool.claimGrant();
+        assertEq(pool.getClaimedCount(), 1);
+        vm.prank(w[1]); pool.claimGrant();
+        assertEq(pool.getClaimedCount(), 2);
+        vm.prank(w[2]); pool.claimGrant();
+        assertEq(pool.getClaimedCount(), 3);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // GET POOL SUMMARY
+    // ══════════════════════════════════════════════════════════════════════════
+
+    function test_GetPoolSummary_StaticFields() public view {
+        PoolSummary memory s = pool.getPoolSummary();
+        assertEq(s.poolAddress,      address(pool));
+        assertEq(s.poolName,         "Web3 Dev Scholarship 2025");
+        assertEq(s.creator,          creator);
+        assertEq(s.submissionStart,  SUBMISSION_START);
+        assertEq(s.submissionEnd,    SUBMISSION_END);
+        assertEq(s.reviewEnd,        REVIEW_END);
+        assertEq(s.signerCount,      5);
+        assertFalse(s.isCancelled);
+        assertFalse(s.distributionEntered);
+    }
+
+    function test_GetPoolSummary_StatePending() public view {
+        PoolSummary memory s = pool.getPoolSummary();
+        assertEq(uint8(s.state), uint8(PoolStateEnum.PENDING));
+    }
+
+    function test_GetPoolSummary_StateActive() public {
+        _inActive();
+        PoolSummary memory s = pool.getPoolSummary();
+        assertEq(uint8(s.state), uint8(PoolStateEnum.ACTIVE));
+    }
+
+    function test_GetPoolSummary_StateCancelled() public {
+        vm.prank(creator);
+        pool.cancelPool();
+        PoolSummary memory s = pool.getPoolSummary();
+        assertEq(uint8(s.state), uint8(PoolStateEnum.CANCELLED));
+        assertTrue(s.isCancelled);
+    }
+
+    function test_GetPoolSummary_ProposalCountUpdates() public {
+        _inActive();
+        _submit(applicant);
+        _submit(applicant2);
+        PoolSummary memory s = pool.getPoolSummary();
+        assertEq(s.proposalCount, 2);
+    }
+
+    function test_GetPoolSummary_WinnersCountUpdates() public {
+        _reachDistribution(10_000e6, 2);
+        PoolSummary memory s = pool.getPoolSummary();
+        assertEq(s.winnersCount,  2);
+        assertEq(uint8(s.state),  uint8(PoolStateEnum.DISTRIBUTING));
+        assertTrue(s.distributionEntered);
+        assertGt(s.distributionAmount, 0);
+    }
+
+    function test_GetPoolSummary_ClaimedCountUpdates() public {
+        _reachDistribution(10_000e6, 1);
+        address winner = pool.getWinners()[0];
+        vm.prank(winner);
+        pool.claimGrant();
+        PoolSummary memory s = pool.getPoolSummary();
+        assertEq(s.claimedCount, 1);
+        assertEq(uint8(s.state), uint8(PoolStateEnum.CLOSED));
+    }
+
+    function test_GetPoolSummary_TotalDeposited() public {
+        _inActive();
+        _donate(donor, 50_000e6);
+        _donate(donor2, 20_000e6);
+        PoolSummary memory s = pool.getPoolSummary();
+        assertEq(s.totalDeposited, 70_000e6);
     }
 }
