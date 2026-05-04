@@ -6,6 +6,7 @@ export interface PoolDetailsData {
   poolName: string;
   creator: string;
   poolAddress: string;
+  usdtTokenAddress: string;
   state: string;
   submissionStart: number;
   submissionEnd: number;
@@ -31,14 +32,21 @@ export async function fetchPoolDetails(
   const resolved = getAddress(poolAddress);
   const poolContract = new Contract(resolved, GrantPoolABI, provider);
   // Use the compact `getPoolSummary` to fetch main fields in one call
-  const [summary, signers, winners, fieldDefinitions, criteriaMetadataCID] =
-    await Promise.all([
-      poolContract.getPoolSummary(),
-      poolContract.getSigners(),
-      poolContract.getWinners(),
-      poolContract.getFieldDefinitions(),
-      poolContract.criteriaMetadataCID(),
-    ]);
+  const [
+    summary,
+    signers,
+    winners,
+    fieldDefinitions,
+    criteriaMetadataCID,
+    usdtTokenAddress,
+  ] = await Promise.all([
+    poolContract.getPoolSummary(),
+    poolContract.getSigners(),
+    poolContract.getWinners(),
+    poolContract.getFieldDefinitions(),
+    poolContract.criteriaMetadataCID(),
+    poolContract.usdt?.() || poolContract.usdtTokenAddress?.(),
+  ]);
 
   const name = summary.poolName;
   const creator = summary.creator;
@@ -64,6 +72,7 @@ export async function fetchPoolDetails(
     poolName: name,
     creator,
     poolAddress: resolved,
+    usdtTokenAddress: usdtTokenAddress || "",
     state,
     submissionStart: Number(submissionStart),
     submissionEnd: Number(submissionEnd),

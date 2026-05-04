@@ -24,6 +24,17 @@ export async function uploadPdfToPinata(
     throw new Error("Please select a PDF file.");
   }
 
+  return uploadFileToPinata(file, name);
+}
+
+export async function uploadFileToPinata(
+  file: File,
+  name: string,
+): Promise<string> {
+  if (!file) {
+    throw new Error("Please select a file to upload.");
+  }
+
   const jwt = getPinataJwt();
   const formData = new FormData();
   formData.append("file", file);
@@ -71,7 +82,7 @@ export async function uploadPdfToPinata(
     throw new Error(
       payload.error?.message ??
         payload.message ??
-        "Failed to upload PDF to Pinata.",
+        "Failed to upload file to Pinata.",
     );
   }
 

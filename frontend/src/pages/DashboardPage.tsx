@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { PoolCard } from "../components/PoolCard";
-import { formatUSDT } from "../utils/format";
+import { formatUSDTWithCommas, formatUSDT } from "../utils/format";
 import { useWalletContext } from "../connection/WalletContext";
 import { useTotalPools } from "../hooks/read-hooks/useTotalPools";
 import { useTotalDeposited } from "../hooks/read-hooks/useTotalDeposited";
@@ -40,7 +40,6 @@ export function DashboardPage() {
             <h1 className="text-2xl sm:text-3xl font-black text-[#07182b]">
               Welcome back
             </h1>
-           
           </div>
           <img
             src={DASHBOARD_PHOTO}
@@ -75,7 +74,7 @@ export function DashboardPage() {
           },
           {
             label: "Total Value",
-            value: `$${formatUSDT(totalDeposited)}`,
+            value: `$${formatUSDTWithCommas(totalDeposited)}`,
             sub: "USDT deposited",
             color: "text-amber-600",
           },

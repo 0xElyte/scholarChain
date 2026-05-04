@@ -1,16 +1,30 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import { Contract, getAddress, isAddress, parseUnits } from "ethers";
 import type { UserRole } from "../types";
 import { Modal } from "../components/Modal";
 import {
   formatUSDT,
+  formatUSDTWithCommas,
   formatDate,
   shortAddr,
   timeRemaining,
 } from "../utils/format";
 import { useWalletContext } from "../connection/WalletContext";
+import useDonatePool from "../hooks/write-hooks/useDonatePool";
+import useUSDTBalance from "../hooks/read-hooks/useUSDTBalance";
 import { usePoolDetails } from "../hooks/read-hooks/usePoolDetails";
+import useRunners from "../hooks/useRunners";
 import { ipfsGatewayUrl } from "../utils/ipfs";
+import { cidToBytes32 } from "../utils/ipfs";
+import { uploadFileToPinata } from "../utils/pinata";
+import GrantPoolABI from "../constants/GrantPoolABI.json";
+
+type FieldInputValue = {
+  text: string;
+  cid: string;
+  fileName: string;
+};
 
 export function PoolDetailPage() {
   const { wallet } = useWalletContext();
@@ -21,10 +35,24 @@ export function PoolDetailPage() {
   const [proposeModal, setProposeModal] = useState(false);
   const [criteriaModal, setCriteriaModal] = useState(false);
   const [donateAmount, setDonateAmount] = useState("");
-  const [docCID, setDocCID] = useState("");
+  const [benefactorDocumentCid, setBenefactorDocumentCid] = useState("");
+  const [benefactorDocumentName, setBenefactorDocumentName] = useState("");
+  const [uploadingMainDoc, setUploadingMainDoc] = useState(false);
+  const [fieldValues, setFieldValues] = useState<FieldInputValue[]>([]);
+  const [uploadingFieldIndex, setUploadingFieldIndex] = useState<number | null>(
+    null,
+  );
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [payoutAddr, setPayoutAddr] = useState("");
   const [txPending, setTxPending] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const { signer } = useRunners();
+  const { donate, loading: donating } = useDonatePool();
+  const {
+    balance: usdtBalance,
+    rawBalance: usdtRawBalance,
+    loading: usdtBalanceLoading,
+  } = useUSDTBalance(pool?.usdtTokenAddress, wallet.address || undefined);
 
   if (loading) {
     return (
@@ -74,7 +102,17 @@ export function PoolDetailPage() {
 
   const quorum = Math.ceil((pool.signers.length * 70) / 100);
   const canDonate = pool.state === "PENDING" || pool.state === "ACTIVE";
-  const canSubmit = pool.state === "ACTIVE" && wallet.isConnected;
+  const canSubmit =
+    pool.state === "ACTIVE" && wallet.isConnected && !isCreator && !isSigner;
+  const requestedDonateAmount = (() => {
+    if (!donateAmount) return 0n;
+
+    try {
+      return parseUnits(donateAmount, 6);
+    } catch {
+      return 0n;
+    }
+  })();
   const canDistribute =
     pool.state === "DISTRIBUTING" && !pool.distributionEntered;
   const canClaim = pool.state === "DISTRIBUTING" && isWinner;
@@ -99,6 +137,172 @@ export function PoolDetailPage() {
     setTxPending(false);
     setToast(msg);
     setTimeout(() => setToast(null), 3500);
+  }
+
+  function ensureFieldState() {
+    if (fieldValues.length === pool!.fieldDefinitions.length) {
+      return;
+    }
+    setFieldValues(
+      pool!.fieldDefinitions.map(() => ({ text: "", cid: "", fileName: "" })),
+    );
+  }
+
+  function updateFieldText(index: number, value: string) {
+    ensureFieldState();
+    setFieldValues((prev) => {
+      const next = [...prev];
+      next[index] = {
+        ...(next[index] || { text: "", cid: "", fileName: "" }),
+        text: value,
+      };
+      return next;
+    });
+  }
+
+  async function uploadMainDocument(file: File | null) {
+    if (!file) return;
+    setSubmitError(null);
+    setUploadingMainDoc(true);
+    try {
+      const cid = await uploadFileToPinata(
+        file,
+        `${pool!.poolName}-benefactor-document-${Date.now()}`,
+      );
+      setBenefactorDocumentCid(cid);
+      setBenefactorDocumentName(file.name);
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : "Failed to upload file",
+      );
+    } finally {
+      setUploadingMainDoc(false);
+    }
+  }
+
+  async function uploadFieldDocument(index: number, file: File | null) {
+    if (!file) return;
+    setSubmitError(null);
+    setUploadingFieldIndex(index);
+    try {
+      const cid = await uploadFileToPinata(
+        file,
+        `${pool!.poolName}-field-${index + 1}-${Date.now()}`,
+      );
+      setFieldValues((prev) => {
+        const next = [...prev];
+        next[index] = {
+          ...(next[index] || { text: "", cid: "", fileName: "" }),
+          cid,
+          fileName: file.name,
+        };
+        return next;
+      });
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : "Failed to upload field document",
+      );
+    } finally {
+      setUploadingFieldIndex(null);
+    }
+  }
+
+  function validateProposalForm() {
+    if (!wallet.isConnected || !signer) {
+      return "Connect your wallet to submit a proposal.";
+    }
+    if (!benefactorDocumentCid) {
+      return "Upload your benefactor document before submitting.";
+    }
+    if (!isAddress(payoutAddr.trim())) {
+      return "Enter a valid payout address.";
+    }
+
+    for (let i = 0; i < pool!.fieldDefinitions.length; i++) {
+      const definition = pool!.fieldDefinitions[i];
+      if (!definition.required) continue;
+      const fieldValue = fieldValues[i] || { text: "", cid: "" };
+      if (definition.fieldType === 2) {
+        if (!fieldValue.cid) {
+          return `Upload the required document for "${definition.label}".`;
+        }
+      } else if (!fieldValue.text.trim()) {
+        return `Fill the required field "${definition.label}".`;
+      }
+    }
+
+    return null;
+  }
+
+  async function handleSubmitProposal() {
+    setSubmitError(null);
+    const validationError = validateProposalForm();
+    if (validationError) {
+      setSubmitError(validationError);
+      return;
+    }
+
+    try {
+      setTxPending(true);
+
+      const payload = {
+        benefactorAddress: wallet.address,
+        benefactorDocumentCID: benefactorDocumentCid,
+        fields: pool!.fieldDefinitions.map((definition, index) => {
+          const fieldValue = fieldValues[index] || {
+            text: "",
+            cid: "",
+            fileName: "",
+          };
+
+          return {
+            label: definition.label,
+            fieldType: definition.fieldType,
+            required: definition.required,
+            value:
+              definition.fieldType === 2 ? fieldValue.cid : fieldValue.text,
+          };
+        }),
+      };
+
+      const payloadFile = new File(
+        [JSON.stringify(payload, null, 2)],
+        `proposal-${Date.now()}.json`,
+        { type: "application/json" },
+      );
+      const payloadCid = await uploadFileToPinata(
+        payloadFile,
+        payloadFile.name,
+      );
+
+      const proposalContract = new Contract(
+        getAddress(pool!.poolAddress),
+        GrantPoolABI,
+        signer,
+      );
+
+      const tx = await proposalContract.submitProposal(
+        cidToBytes32(payloadCid),
+        getAddress(payoutAddr.trim()),
+      );
+      await tx.wait();
+
+      setProposeModal(false);
+      setBenefactorDocumentCid("");
+      setBenefactorDocumentName("");
+      setFieldValues(
+        pool!.fieldDefinitions.map(() => ({ text: "", cid: "", fileName: "" })),
+      );
+      setPayoutAddr("");
+      setToast("Proposal submitted successfully");
+      setTimeout(() => setToast(null), 3500);
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : "Failed to submit proposal",
+      );
+    } finally {
+      setTxPending(false);
+    }
   }
 
   return (
@@ -145,8 +349,6 @@ export function PoolDetailPage() {
         <p className="text-sm text-slate-500">
           Created by{" "}
           <span className="font-mono">{shortAddr(pool.creator)}</span>
-          
-          
         </p>
       </div>
 
@@ -162,7 +364,11 @@ export function PoolDetailPage() {
         )}
         {canSubmit && (
           <button
-            onClick={() => setProposeModal(true)}
+            onClick={() => {
+              ensureFieldState();
+              setSubmitError(null);
+              setProposeModal(true);
+            }}
             className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#07182b] text-white hover:bg-teal-700 transition-colors cursor-pointer"
           >
             📝 Submit Proposal
@@ -218,7 +424,7 @@ export function PoolDetailPage() {
               {[
                 {
                   l: "Total Deposited",
-                  v: `${formatUSDT(pool.totalDeposited)} USDT`,
+                  v: `${formatUSDTWithCommas(pool.totalDeposited)} USDT`,
                   c: "text-slate-800",
                 },
                 {
@@ -306,7 +512,7 @@ export function PoolDetailPage() {
           </Card>
 
           {/* Proposals + voting */}
-          {(pool.state === "ACTIVE" ||
+          {/* {(pool.state === "ACTIVE" ||
             pool.state === "REVIEW" ||
             pool.state === "DISTRIBUTING" ||
             pool.state === "CLOSED") && (
@@ -319,7 +525,7 @@ export function PoolDetailPage() {
                 </p>
               </div>
             </Card>
-          )}
+          )} */}
 
           {/* My proposal placeholder */}
           {isWinner && (
@@ -432,9 +638,12 @@ export function PoolDetailPage() {
           onChange={(e) => setDonateAmount(e.target.value)}
           className="scholar-input w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-teal-500 mb-1"
         />
-        <p className="text-xs text-slate-400 mb-6">
-          Wallet balance: {wallet.balance} USDT
-        </p>
+        <div className="mb-6 rounded-lg border border-teal-100 bg-teal-50 px-3 py-2 text-xs text-teal-800">
+          <div className="font-medium">Connected wallet Mock USDT balance</div>
+          <div className="font-mono">
+            {usdtBalanceLoading ? "Loading…" : `${usdtBalance} USDT`}
+          </div>
+        </div>
         <div className="flex justify-end gap-3">
           <button
             onClick={() => setDonateModal(false)}
@@ -443,12 +652,43 @@ export function PoolDetailPage() {
             Cancel
           </button>
           <button
-            onClick={() => {
-              setDonateModal(false);
-              stub(`Donated ${donateAmount} USDT`);
-              setDonateAmount("");
+            onClick={async () => {
+              if (!donateAmount || parseFloat(donateAmount) <= 0) return;
+              if (requestedDonateAmount > usdtRawBalance) {
+                setToast("Insufficient Mock USDT balance");
+                setTimeout(() => setToast(null), 3500);
+                return;
+              }
+              try {
+                setTxPending(true);
+                const res = await donate(
+                  pool.poolAddress,
+                  donateAmount,
+                  pool.usdtTokenAddress,
+                  { tokenDecimals: 6 },
+                );
+                if (res.tx) {
+                  setToast(`Donated ${donateAmount} USDT`);
+                  setTimeout(() => setToast(null), 3500);
+                } else if (res.error) {
+                  setToast(res.error.message || "Donation failed");
+                  setTimeout(() => setToast(null), 3500);
+                }
+              } catch (e) {
+                setToast(e instanceof Error ? e.message : "Donation failed");
+                setTimeout(() => setToast(null), 3500);
+              } finally {
+                setTxPending(false);
+                setDonateModal(false);
+                setDonateAmount("");
+              }
             }}
-            disabled={!donateAmount || parseFloat(donateAmount) <= 0}
+            disabled={
+              donating ||
+              !donateAmount ||
+              parseFloat(donateAmount) <= 0 ||
+              requestedDonateAmount > usdtRawBalance
+            }
             className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#07182b] text-white hover:bg-teal-700 disabled:opacity-50 cursor-pointer"
           >
             Confirm
@@ -465,20 +705,34 @@ export function PoolDetailPage() {
         <p className="text-sm text-slate-600 mb-4">
           Submitting to <strong>{pool.poolName}</strong>
         </p>
+        {submitError && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {submitError}
+          </div>
+        )}
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
-              Application Document CID <span className="text-red-500">*</span>
+              Benefactor Document <span className="text-red-500">*</span>
             </label>
             <input
-              type="text"
-              placeholder="IPFS CID of your application JSON"
-              value={docCID}
-              onChange={(e) => setDocCID(e.target.value)}
-              className="scholar-input w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
+              type="file"
+              onChange={(e) =>
+                void uploadMainDocument(e.target.files?.[0] ?? null)
+              }
+              className="scholar-input w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-teal-500"
             />
+            {uploadingMainDoc && (
+              <p className="text-xs text-slate-500 mt-1">Uploading document…</p>
+            )}
+            {!!benefactorDocumentCid && (
+              <p className="text-xs text-emerald-600 mt-1 break-all">
+                Uploaded: {benefactorDocumentName} ({benefactorDocumentCid})
+              </p>
+            )}
             <p className="text-xs text-slate-400 mt-1">
-              Upload your application to IPFS, paste the CID here.
+              Upload your proposal/benefactor supporting document. CID is
+              generated automatically.
             </p>
           </div>
           <div>
@@ -493,21 +747,57 @@ export function PoolDetailPage() {
               className="scholar-input w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
             />
           </div>
-          {/* Schema preview */}
+          {/* Dynamic required fields */}
           <div className="bg-white rounded-xl p-3 space-y-1.5 border border-cyan-950/10 shadow-sm">
             <p className="text-xs font-medium text-slate-600 mb-2">
-              Required fields in your JSON:
+              Fill the required fields:
             </p>
             {pool.fieldDefinitions.map((f, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2 text-xs text-slate-600"
+                className="space-y-1.5 border-b border-slate-100 pb-3 last:border-b-0 last:pb-0"
               >
-                <span className="w-4 h-4 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
-                  {i + 1}
-                </span>
-                {f.label}
-                {f.required && <span className="text-red-500">*</span>}
+                <div className="flex items-center gap-2 text-xs text-slate-600">
+                  <span className="w-4 h-4 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
+                    {i + 1}
+                  </span>
+                  {f.label}
+                  {f.required && <span className="text-red-500">*</span>}
+                </div>
+                {f.fieldType === 2 ? (
+                  <div>
+                    <input
+                      type="file"
+                      onChange={(e) =>
+                        void uploadFieldDocument(i, e.target.files?.[0] ?? null)
+                      }
+                      className="scholar-input w-full px-3 py-2 text-xs rounded-lg border focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                    {uploadingFieldIndex === i && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        Uploading field document…
+                      </p>
+                    )}
+                    {!!fieldValues[i]?.cid && (
+                      <p className="text-xs text-emerald-600 mt-1 break-all">
+                        Uploaded: {fieldValues[i]?.fileName || "document"} (
+                        {fieldValues[i]?.cid})
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <input
+                    type={f.fieldType === 1 ? "url" : "text"}
+                    value={fieldValues[i]?.text || ""}
+                    onChange={(e) => updateFieldText(i, e.target.value)}
+                    placeholder={
+                      f.fieldType === 1
+                        ? "https://example.com"
+                        : "Enter field value"
+                    }
+                    className="scholar-input w-full px-3 py-2 text-xs rounded-lg border focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                )}
               </div>
             ))}
           </div>
@@ -520,16 +810,13 @@ export function PoolDetailPage() {
             Cancel
           </button>
           <button
-            onClick={() => {
-              setProposeModal(false);
-              stub("Proposal submitted successfully");
-              setDocCID("");
-              setPayoutAddr("");
-            }}
-            disabled={!docCID || !payoutAddr}
+            onClick={() => void handleSubmitProposal()}
+            disabled={
+              txPending || uploadingMainDoc || uploadingFieldIndex !== null
+            }
             className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#07182b] text-white hover:bg-teal-700 disabled:opacity-50 cursor-pointer"
           >
-            Submit
+            {txPending ? "Submitting…" : "Submit"}
           </button>
         </div>
       </Modal>

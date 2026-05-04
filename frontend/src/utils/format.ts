@@ -6,6 +6,20 @@ export function formatUSDT(raw: string): string {
   return n.toLocaleString();
 }
 
+export function formatUSDTWithCommas(raw: string): string {
+  const n = Number(raw);
+  if (Number.isNaN(n)) return "0";
+
+  const [whole, fraction] = n
+    .toLocaleString("en-US", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    })
+    .split(".");
+
+  return fraction ? `${whole}.${fraction}` : whole;
+}
+
 export function formatDate(ms: number): string {
   return new Date(ms).toLocaleDateString("en-US", {
     month: "short",

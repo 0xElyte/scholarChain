@@ -1,5 +1,4 @@
-import { Link, NavLink, Outlet } from "react-router-dom";
-import logo from "../assets/logo.png";
+import { NavLink, Outlet } from "react-router-dom";
 
 const DASH_LINKS = [
   { to: "/dashbar/dashboard", label: "Dashboard", icon: "D" },
@@ -12,8 +11,6 @@ export function DashbarLayout() {
     <div className="min-h-screen bg-[#eef6f4] pt-16">
       <div className="mx-auto flex max-w-[1440px]">
         <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-72 shrink-0 border-r border-cyan-950/10 bg-white/90 p-5 backdrop-blur-xl lg:block">
-          
-
           <nav className="space-y-1">
             {DASH_LINKS.map((item) => (
               <NavLink

@@ -3,7 +3,7 @@ import { useTotalDeposited } from "../hooks/read-hooks/useTotalDeposited";
 import { useTotalPools } from "../hooks/read-hooks/useTotalPools";
 import { useTotalProposals } from "../hooks/read-hooks/useTotalProposals";
 import { useTotalVotes } from "../hooks/read-hooks/useTotalVotes";
-import { formatUSDT } from "../utils/format";
+import { formatUSDTWithCommas } from "../utils/format";
 import { useWalletContext } from "../connection/WalletContext";
 
 const FEATURES = [
@@ -49,7 +49,7 @@ export function LandingPage() {
   const navigate = useNavigate();
   const { wallet, connect } = useWalletContext();
   const totalDeposited = useTotalDeposited();
-  const formattedTotal = `$${formatUSDT(totalDeposited)}`;
+  const formattedTotal = `$${formatUSDTWithCommas(totalDeposited)}`;
   const totalPools = useTotalPools();
   const totalProposals = useTotalProposals();
   const totalVotes = useTotalVotes();
