@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@reown/appkit": "^1.8.19",
+    "@reown/appkit-adapter-ethers": "^1.8.19",
     "@tailwindcss/vite": "^4.2.4",
     "@tiptap/extension-placeholder": "^3.22.5",
     "@tiptap/pm": "^3.22.5",
@@ -17,6 +19,7 @@
     "@tiptap/starter-kit": "^3.22.5",
     "@types/react-router-dom": "^5.3.3",
     "ethers": "^6.16.0",
+    "ethers-decode-error": "^2.1.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router-dom": "^7.14.2",
