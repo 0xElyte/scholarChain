@@ -16,8 +16,20 @@ export const useActivePools = () => {
         return;
       }
 
+      // Prefer factory aggregate stats (single RPC), fallback to per-pool checks.
+      try {
+        const [, activePoolCount] = await factoryContract.getProtocolStats();
+        setActivePools(activePoolCount.toString());
+        return;
+      } catch (error) {
+        console.log(
+          "getProtocolStats unavailable, falling back to pool scan:",
+          error,
+        );
+      }
+
       const poolAddresses = await factoryContract.getAllPools();
-      const activeStates = new Set(["ACTIVE", "PENDING"]);
+      const activeStates = new Set([0, 1]); // PENDING, ACTIVE
       let totalActivePools = 0;
 
       for (const poolAddress of poolAddresses) {
@@ -27,7 +39,7 @@ export const useActivePools = () => {
             GrantPoolABI,
             readOnlyProvider,
           );
-          const state = String(await poolContract.currentState()).toUpperCase();
+          const state = Number(await poolContract.currentState());
           if (activeStates.has(state)) {
             totalActivePools += 1;
           }

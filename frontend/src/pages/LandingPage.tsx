@@ -4,6 +4,7 @@ import { useTotalPools } from "../hooks/read-hooks/useTotalPools";
 import { useTotalProposals } from "../hooks/read-hooks/useTotalProposals";
 import { useTotalVotes } from "../hooks/read-hooks/useTotalVotes";
 import { formatUSDT } from "../utils/format";
+import { useWalletContext } from "../connection/WalletContext";
 
 const FEATURES = [
   {
@@ -14,12 +15,12 @@ const FEATURES = [
   {
     icon: "02",
     title: "Community review",
-    desc: "Scholarship panels approve applications through on-chain voting with clear quorum requirements.",
+    desc: "Grant panels approve applications through on-chain voting with clear quorum requirements.",
   },
   {
     icon: "03",
     title: "Direct grant claims",
-    desc: "Approved scholars claim funds straight to their wallet when the pool enters distribution.",
+    desc: "Approved grant recipients claim funds straight to their wallet when the pool enters distribution.",
   },
   {
     icon: "04",
@@ -31,7 +32,7 @@ const FEATURES = [
 const STEPS = [
   "Create a pool with criteria, dates, reviewers, and USDT token settings.",
   "Donors fund the grant pool while applicants prepare their proposal documents.",
-  "Scholars submit IPFS proposal CIDs and payout wallet addresses.",
+  "Grant applicants submit IPFS proposal CIDs and payout wallet addresses.",
   "Reviewers vote, winners are selected, and grants are claimed on-chain.",
 ];
 
@@ -46,11 +47,30 @@ const CTA_PHOTO =
 
 export function LandingPage() {
   const navigate = useNavigate();
+  const { wallet, connect } = useWalletContext();
   const totalDeposited = useTotalDeposited();
   const formattedTotal = `$${formatUSDT(totalDeposited)}`;
   const totalPools = useTotalPools();
   const totalProposals = useTotalProposals();
   const totalVotes = useTotalVotes();
+
+  const handleCreateClick = async () => {
+    if (!wallet.isConnected) {
+      await connect();
+      return;
+    }
+
+    navigate("/dashbar/create");
+  };
+
+  const handleExploreClick = async () => {
+    if (!wallet.isConnected) {
+      await connect();
+      return;
+    }
+
+    navigate("/dashbar/explore");
+  };
 
   return (
     <div className="bg-[#f7fbfb] text-slate-900">
@@ -59,7 +79,7 @@ export function LandingPage() {
         <div className="absolute inset-0">
           <img
             src={SCHOLAR_PHOTO}
-            alt="Students collaborating on scholarship work"
+            alt="Students collaborating on grant work"
             className="h-full w-full object-cover opacity-70"
           />
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,24,43,0.94)_0%,rgba(7,24,43,0.78)_38%,rgba(7,24,43,0.22)_100%)]" />
@@ -70,7 +90,7 @@ export function LandingPage() {
           <div className="flex-1 grid lg:grid-cols-[1fr_380px] gap-10 items-end">
             <div className="max-w-4xl animate-fade-up">
               <h1 className="text-5xl sm:text-7xl lg:text-8xl font-black leading-[0.9] tracking-tight text-white max-w-5xl">
-                Scholarships with proof, not paperwork.
+                Grants with proof, not paperwork.
               </h1>
 
               <p className="mt-7 text-lg text-slate-200 max-w-2xl leading-relaxed">
@@ -81,14 +101,14 @@ export function LandingPage() {
 
               <div className="mt-9 flex flex-wrap gap-3">
                 <button
-                  onClick={() => navigate("/dashbar/create")}
+                  onClick={() => void handleCreateClick()}
                   className="px-6 py-3 rounded-xl bg-amber-400 text-[#07182b] text-sm font-bold hover:bg-amber-300 transition-all cursor-pointer"
                 >
                   Create Pool
                 </button>
 
                 <button
-                  onClick={() => navigate("/dashbar/explore")}
+                  onClick={() => void handleExploreClick()}
                   className="px-6 py-3 rounded-xl bg-teal-700 text-white text-sm font-bold hover:bg-teal-600 transition-all cursor-pointer"
                 >
                   Explore Pools
@@ -179,7 +199,8 @@ export function LandingPage() {
                 Product Flow
               </p>
               <h2 className="text-4xl lg:text-5xl font-black text-[#07182b] leading-tight">
-                One interface for creators, reviewers, donors, and scholars.
+                One interface for creators, reviewers, donors, and grant
+                recipients.
               </h2>
               <p className="mt-5 text-slate-600 leading-relaxed">
                 ScholarChain is built around the grant pool lifecycle. The UI
@@ -294,7 +315,7 @@ export function LandingPage() {
                   Start building
                 </p>
                 <h2 className="text-3xl sm:text-4xl font-black text-[#07182b] leading-tight mb-4">
-                  Launch a verifiable scholarship program.
+                  Launch a verifiable grant program.
                 </h2>
                 <p className="text-slate-600 leading-relaxed mb-8">
                   Explore existing grant pools, create a new pool for your
@@ -303,13 +324,13 @@ export function LandingPage() {
                 </p>
                 <div className="flex flex-wrap gap-3">
                   <button
-                    onClick={() => navigate("/dashbar/explore")}
+                    onClick={() => void handleExploreClick()}
                     className="px-6 py-3 rounded-xl bg-[#07182b] text-white text-sm font-bold hover:bg-teal-700 transition-all cursor-pointer"
                   >
                     Explore Pools
                   </button>
                   <button
-                    onClick={() => navigate("/dashbar/create")}
+                    onClick={() => void handleCreateClick()}
                     className="px-6 py-3 rounded-xl bg-amber-400 text-[#07182b] text-sm font-bold hover:bg-amber-300 transition-all cursor-pointer"
                   >
                     Create Pool

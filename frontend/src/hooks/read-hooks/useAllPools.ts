@@ -1,21 +1,11 @@
 import { useEffect, useState } from "react";
 import useRunners from "../useRunners";
 import { useFactoryContract } from "../useContracts";
-import { fetchPoolDetails } from "./poolFetcher";
+import type { PoolState } from "../../types";
+import type { GrantPool } from "../../types";
 
-export interface PoolSummary {
-  address: string;
-  poolName: string;
-  creator: string;
-  state: string;
-  submissionStart: number;
-  submissionEnd: number;
-  reviewEnd: number;
-  totalDeposited: string;
-  distributionAmount: string;
-  criteriaMetadataCID: string;
-  signers: string[];
-  winners: string[];
+export interface PoolSummary extends Omit<GrantPool, "state"> {
+  state: PoolState;
 }
 
 export const useAllPools = () => {
@@ -37,42 +27,50 @@ export const useAllPools = () => {
           return;
         }
 
-        // Get all pool addresses
-        const poolAddresses: string[] = await factoryContract.getAllPools();
+        // Get all pool summaries from factory (includes counts)
+        const summaries: any[] = await factoryContract.getAllPoolSummaries();
 
-        if (poolAddresses.length === 0) {
+        if (summaries.length === 0) {
           setPools([]);
           setLoading(false);
           return;
         }
 
-        // Fetch details for each pool in parallel using the shared fetcher
-        const poolPromises = poolAddresses.map(async (addr) => {
-          try {
-            const details = await fetchPoolDetails(addr, readOnlyProvider);
-            return {
-              address: details.poolAddress,
-              poolName: details.poolName,
-              creator: details.creator,
-              state: details.state,
-              submissionStart: details.submissionStart,
-              submissionEnd: details.submissionEnd,
-              reviewEnd: details.reviewEnd,
-              totalDeposited: details.totalDeposited,
-              distributionAmount: details.distributionAmount,
-              criteriaMetadataCID: details.criteriaMetadataCID,
-              signers: details.signers,
-              winners: details.winners,
-            };
-          } catch (err) {
-            console.error(`Failed to fetch pool ${addr}:`, err);
-            return null;
-          }
-        });
+        // State enum mapping
+        const STATE_MAP: Record<number, PoolState> = {
+          0: "PENDING",
+          1: "ACTIVE",
+          2: "REVIEW",
+          3: "DISTRIBUTING",
+          4: "CLOSED",
+          5: "CANCELLED",
+        };
 
-        const results = await Promise.all(poolPromises);
-        const validPools = results.filter((p) => p !== null) as PoolSummary[];
-        setPools(validPools);
+        // Map summaries to PoolSummary interface
+        const mappedPools: PoolSummary[] = summaries.map((s: any) => ({
+          address: s.poolAddress,
+          poolName: s.poolName,
+          creator: s.creator,
+          state: STATE_MAP[Number(s.state)] || "CLOSED",
+          submissionStart: Number(s.submissionStart),
+          submissionEnd: Number(s.submissionEnd),
+          reviewEnd: Number(s.reviewEnd),
+          totalDeposited: s.totalDeposited.toString(),
+          distributionAmount: s.distributionAmount.toString(),
+          criteriaMetadataCID: "",
+          signers: s.signers || [],
+          winners: s.winners || [],
+          treasury: "",
+          signerCount: Number(s.signerCount),
+          winnersCount: Number(s.winnersCount),
+          proposalCount: Number(s.proposalCount),
+          isCancelled: s.isCancelled || false,
+          distributionEntered: s.distributionEntered || false,
+          createdAt: Number(s.submissionStart),
+          fieldDefinitions: [],
+        }));
+
+        setPools(mappedPools);
       } catch (err) {
         console.error("Failed to fetch all pools:", err);
         setError(err instanceof Error ? err.message : "Failed to fetch pools");

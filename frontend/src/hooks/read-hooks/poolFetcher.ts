@@ -1,5 +1,6 @@
 import { Contract, getAddress } from "ethers";
 import GrantPoolABI from "../../constants/GrantPoolABI.json";
+import { bytes32ToCid } from "../../utils/ipfs";
 
 export interface PoolDetailsData {
   poolName: string;
@@ -29,38 +30,35 @@ export async function fetchPoolDetails(
 ): Promise<PoolDetailsData> {
   const resolved = getAddress(poolAddress);
   const poolContract = new Contract(resolved, GrantPoolABI, provider);
+  // Use the compact `getPoolSummary` to fetch main fields in one call
+  const [summary, signers, winners, fieldDefinitions, criteriaMetadataCID] =
+    await Promise.all([
+      poolContract.getPoolSummary(),
+      poolContract.getSigners(),
+      poolContract.getWinners(),
+      poolContract.getFieldDefinitions(),
+      poolContract.criteriaMetadataCID(),
+    ]);
 
-  const [
-    name,
-    creator,
-    state,
-    submissionStart,
-    submissionEnd,
-    reviewEnd,
-    criteriaMetadataCID,
-    totalDeposited,
-    distributionAmount,
-    distributionEntered,
-    isCancelled,
-    signers,
-    winners,
-    fieldDefinitions,
-  ] = await Promise.all([
-    poolContract.poolName(),
-    poolContract.creator(),
-    poolContract.currentState(),
-    poolContract.submissionStart(),
-    poolContract.submissionEnd(),
-    poolContract.reviewEnd(),
-    poolContract.criteriaMetadataCID(),
-    poolContract.totalDeposited(),
-    poolContract.distributionAmount(),
-    poolContract.distributionEntered(),
-    poolContract.isCancelled(),
-    poolContract.getSigners(),
-    poolContract.getWinners(),
-    poolContract.getFieldDefinitions(),
-  ]);
+  const name = summary.poolName;
+  const creator = summary.creator;
+  const STATE_MAP: Record<number, string> = {
+    0: "PENDING",
+    1: "ACTIVE",
+    2: "REVIEW",
+    3: "DISTRIBUTING",
+    4: "CLOSED",
+    5: "CANCELLED",
+  };
+
+  const state = STATE_MAP[Number(summary.state)] || "CLOSED";
+  const submissionStart = summary.submissionStart;
+  const submissionEnd = summary.submissionEnd;
+  const reviewEnd = summary.reviewEnd;
+  const totalDeposited = summary.totalDeposited;
+  const distributionAmount = summary.distributionAmount;
+  const distributionEntered = summary.distributionEntered;
+  const isCancelled = summary.isCancelled;
 
   return {
     poolName: name,
@@ -70,7 +68,7 @@ export async function fetchPoolDetails(
     submissionStart: Number(submissionStart),
     submissionEnd: Number(submissionEnd),
     reviewEnd: Number(reviewEnd),
-    criteriaMetadataCID,
+    criteriaMetadataCID: bytes32ToCid(criteriaMetadataCID as string),
     totalDeposited: totalDeposited.toString(),
     distributionAmount: distributionAmount.toString(),
     distributionEntered,

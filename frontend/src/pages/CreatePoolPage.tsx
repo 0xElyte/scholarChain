@@ -1,30 +1,33 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { getAddress, isAddress } from "ethers";
 import type { FieldDefinition } from "../types";
 import { FieldType } from "../types";
 import { Modal } from "../components/Modal";
 import { useWalletContext } from "../connection/WalletContext";
+import { useDeployPool } from "../hooks/write-hooks/useDeployPool";
+import { uploadPdfToPinata } from "../utils/pinata";
 
 interface FormState {
   poolName: string;
+  criteriaFile: File | null;
   criteriaMetadataCID: string;
   submissionStart: string;
   submissionEnd: string;
   reviewDuration: string;
   signers: string[];
   usdtTokenAddress: string;
-  initialDeposit: string;
 }
 
 const EMPTY_FORM: FormState = {
   poolName: "",
+  criteriaFile: null,
   criteriaMetadataCID: "",
   submissionStart: "",
   submissionEnd: "",
   reviewDuration: "7",
   signers: ["", "", ""],
   usdtTokenAddress: "",
-  initialDeposit: "",
 };
 
 type FormErrors = Partial<Record<keyof FormState | "fields", string>>;
@@ -35,17 +38,68 @@ const CREATE_POOL_PHOTO =
 export function CreatePoolPage() {
   const { wallet } = useWalletContext();
   const navigate = useNavigate();
+  const {
+    deploy: deployPool,
+    isLoading,
+    error: deployError,
+    createdPoolAddress,
+  } = useDeployPool();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [fields, setFields] = useState<FieldDefinition[]>([
     { fieldType: FieldType.TEXT, label: "", required: true },
   ]);
-  const [isSubmitting, setSubmitting] = useState(false);
   const [successModal, setSuccess] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
+  const [criteriaUploadState, setCriteriaUploadState] = useState<
+    "idle" | "uploading" | "done" | "error"
+  >("idle");
+  const [criteriaUploadError, setCriteriaUploadError] = useState<string | null>(
+    null,
+  );
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
     setErrors((e) => ({ ...e, [key]: undefined }));
+  }
+
+  async function setCriteriaFile(file: File | null) {
+    setCriteriaUploadError(null);
+
+    if (!file) {
+      setForm((f) => ({
+        ...f,
+        criteriaFile: null,
+        criteriaMetadataCID: "",
+      }));
+      setCriteriaUploadState("idle");
+      return;
+    }
+
+    setField("criteriaFile", file);
+    setCriteriaUploadState("uploading");
+
+    try {
+      const cid = await uploadPdfToPinata(
+        file,
+        `${form.poolName.trim() || "criteria"}-criteria.pdf`,
+      );
+      setForm((f) => ({
+        ...f,
+        criteriaFile: file,
+        criteriaMetadataCID: cid,
+      }));
+      setCriteriaUploadState("done");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed.";
+      setCriteriaUploadState("error");
+      setCriteriaUploadError(message);
+      setForm((f) => ({
+        ...f,
+        criteriaFile: null,
+        criteriaMetadataCID: "",
+      }));
+      setErrors((e) => ({ ...e, criteriaFile: message }));
+    }
   }
 
   function setSigner(i: number, val: string) {
@@ -57,24 +111,57 @@ export function CreatePoolPage() {
   function validate(): boolean {
     const e: FormErrors = {};
     if (!form.poolName.trim()) e.poolName = "Required.";
-    if (!form.criteriaMetadataCID.trim()) e.criteriaMetadataCID = "Required.";
+
+    if (!form.criteriaFile) e.criteriaFile = "Upload a PDF criteria document.";
+    else if (form.criteriaFile.type !== "application/pdf") {
+      e.criteriaFile = "Criteria must be a PDF file.";
+    } else if (!form.criteriaMetadataCID) {
+      e.criteriaFile = "Wait for the PDF upload to finish before deploying.";
+    }
+
     if (!form.submissionStart) e.submissionStart = "Required.";
     if (!form.submissionEnd) e.submissionEnd = "Required.";
     if (form.submissionStart && form.submissionEnd) {
-      const s = new Date(form.submissionStart).getTime() / 1000;
-      const e2 = new Date(form.submissionEnd).getTime() / 1000;
-      if (s <= Date.now() / 1000) e.submissionStart = "Must be in the future.";
-      if (e2 <= s + 86400)
+      const start = new Date(form.submissionStart).getTime() / 1000;
+      const end = new Date(form.submissionEnd).getTime() / 1000;
+      if (start <= Date.now() / 1000)
+        e.submissionStart = "Must be in the future.";
+      if (end <= start + 86400)
         e.submissionEnd = "Must be at least 1 day after start.";
     }
     if (Number(form.reviewDuration) < 1) e.reviewDuration = "Minimum 1 day.";
-    const valid = form.signers.filter((s) =>
-      /^0x[0-9a-fA-F]{40}$/.test(s.trim()),
-    );
-    if (valid.length < 3) e.signers = "Need at least 3 valid 0x addresses.";
+
+    const normalizedSigners: string[] = [];
+    const seenSigners = new Set<string>();
+    for (const signer of form.signers) {
+      const trimmed = signer.trim();
+      if (!trimmed) continue;
+      if (!isAddress(trimmed)) {
+        e.signers = "Need at least 3 unique valid 0x addresses.";
+        break;
+      }
+
+      const checksum = getAddress(trimmed);
+      const key = checksum.toLowerCase();
+      if (seenSigners.has(key)) {
+        e.signers = "Reviewer addresses must be unique.";
+        break;
+      }
+      seenSigners.add(key);
+      normalizedSigners.push(checksum);
+    }
+    if (!e.signers && normalizedSigners.length < 3) {
+      e.signers = "Need at least 3 unique valid 0x addresses.";
+    }
+
     if (!form.usdtTokenAddress.trim()) e.usdtTokenAddress = "Required.";
-    if (fields.some((f) => !f.label.trim()))
+    else if (!isAddress(form.usdtTokenAddress.trim()))
+      e.usdtTokenAddress = "Enter a valid ERC-20 contract address.";
+
+    if (fields.some((field) => !field.label.trim())) {
       e.fields = "All field labels are required.";
+    }
+
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -82,10 +169,23 @@ export function CreatePoolPage() {
   async function handleSubmit(ev: FormEvent<HTMLFormElement>) {
     ev.preventDefault();
     if (!validate()) return;
-    setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1400));
-    setSubmitting(false);
-    setSuccess(true);
+
+    try {
+      await deployPool({
+        poolName: form.poolName,
+        criteriaMetadataCID: form.criteriaMetadataCID,
+        submissionStart: new Date(form.submissionStart),
+        submissionEnd: new Date(form.submissionEnd),
+        reviewDuration: Number(form.reviewDuration),
+        signers: form.signers,
+        usdtTokenAddress: form.usdtTokenAddress,
+        fields,
+      });
+      setSuccess(true);
+    } catch (err) {
+      // Error is already handled by useDeployPool hook
+      return;
+    }
   }
 
   if (!wallet.isConnected) {
@@ -127,35 +227,75 @@ export function CreatePoolPage() {
       </div>
 
       <form onSubmit={handleSubmit} noValidate className="space-y-8">
-        {/* ── Pool Identity ── */}
+        {deployError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {deployError}
+          </div>
+        )}
+
         <Fieldset title="Pool Identity">
           <Field label="Pool Name" error={errors.poolName} required>
             <input
               type="text"
               maxLength={100}
-              placeholder="e.g. Web3 Developer Scholarship 2025"
+              placeholder="e.g. Web3 Developer Grant 2025"
               value={form.poolName}
               onChange={(e) => setField("poolName", e.target.value)}
               className={input(errors.poolName)}
             />
           </Field>
           <Field
-            label="Criteria Metadata CID"
-            error={errors.criteriaMetadataCID}
-            hint="Upload your criteria PDF to IPFS and paste the CID."
+            label="Criteria PDF"
+            error={errors.criteriaFile}
+            hint="Upload the PDF that explains the grant criteria. It will be pinned to Pinata and stored on-chain as an IPFS reference."
             required
           >
-            <input
-              type="text"
-              placeholder="QmXyZ…"
-              value={form.criteriaMetadataCID}
-              onChange={(e) => setField("criteriaMetadataCID", e.target.value)}
-              className={input(errors.criteriaMetadataCID)}
-            />
+            <div className="space-y-2">
+              {!form.criteriaFile ? (
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={(e) => setCriteriaFile(e.target.files?.[0] ?? null)}
+                  className={input(errors.criteriaFile)}
+                />
+              ) : (
+                <div className="flex items-center gap-3">
+                  <span className="text-lg">
+                    {criteriaUploadState === "uploading"
+                      ? "🔄"
+                      : criteriaUploadState === "done"
+                        ? "✅"
+                        : "📄"}
+                  </span>
+                  <span className="text-sm text-slate-700 font-mono break-all">
+                    {form.criteriaFile.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCriteriaFile(null)}
+                    className="ml-auto text-sm text-red-500 hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+              {criteriaUploadState === "uploading" && (
+                <p className="text-xs text-slate-500">
+                  Uploading PDF to IPFS...
+                </p>
+              )}
+              {criteriaUploadState === "done" && form.criteriaMetadataCID && (
+                <p className="text-xs text-emerald-600">
+                  Uploaded and ready to deploy.
+                </p>
+              )}
+              {criteriaUploadState === "error" && criteriaUploadError && (
+                <p className="text-xs text-red-600">{criteriaUploadError}</p>
+              )}
+            </div>
           </Field>
         </Fieldset>
 
-        {/* ── Timing ── */}
         <Fieldset title="Timing">
           <div className="grid sm:grid-cols-2 gap-4">
             <Field
@@ -186,7 +326,7 @@ export function CreatePoolPage() {
           <Field
             label="Review Duration (days)"
             error={errors.reviewDuration}
-            hint="Minimum 1 day. How long reviewers have after submissions close."
+            hint="Minimum 1 day. The contract stores this as seconds, so the UI converts days for you."
             required
           >
             <input
@@ -200,7 +340,6 @@ export function CreatePoolPage() {
           </Field>
         </Fieldset>
 
-        {/* ── Review panel ── */}
         <Fieldset
           title="Review Panel"
           desc="At least 3 Ethereum addresses. Approval requires 70% quorum. List locks when submissions open."
@@ -251,7 +390,6 @@ export function CreatePoolPage() {
           )}
         </Fieldset>
 
-        {/* ── Funding ── */}
         <Fieldset title="Funding">
           <Field
             label="USDT Token Address"
@@ -267,22 +405,8 @@ export function CreatePoolPage() {
               className={`${input(errors.usdtTokenAddress)} font-mono`}
             />
           </Field>
-          <Field
-            label="Initial Deposit (USDT)"
-            hint="Optional. A 10% protocol fee applies at distribution."
-          >
-            <input
-              type="number"
-              min={0}
-              placeholder="0"
-              value={form.initialDeposit}
-              onChange={(e) => setField("initialDeposit", e.target.value)}
-              className={`${input()} max-w-[160px]`}
-            />
-          </Field>
         </Fieldset>
 
-        {/* ── Application form schema ── */}
         <Fieldset
           title="Application Form Schema"
           desc="Fields applicants must fill in. Stored on-chain. Max 10 fields."
@@ -371,15 +495,18 @@ export function CreatePoolPage() {
           )}
         </Fieldset>
 
-        {/* Fee notice */}
         <div className="flex gap-3 p-4 rounded-xl bg-teal-50 border border-teal-200">
           <span className="text-lg shrink-0">ℹ️</span>
           <div className="text-sm text-teal-900">
             <p className="font-semibold">Protocol fee: 10%</p>
             <p className="text-teal-700 mt-0.5">
-              10% of total deposits go to the ScholarChain treasury at
-              distribution. The remaining 90% goes to winners, or is refunded
-              proportionally if there are none.
+              10% of total deposits go to the treasury at distribution. The
+              remaining 90% goes to winners, or is refunded proportionally if
+              there are none.
+            </p>
+            <p className="text-teal-700 mt-2">
+              The criteria PDF is uploaded to IPFS on submit and the link will
+              be available from the pool detail page.
             </p>
           </div>
         </div>
@@ -394,10 +521,10 @@ export function CreatePoolPage() {
           </button>
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isLoading}
             className="px-6 py-2.5 text-sm font-semibold rounded-lg bg-[#07182b] text-white hover:bg-teal-700 disabled:opacity-60 transition-colors cursor-pointer"
           >
-            {isSubmitting ? "Deploying…" : "Deploy Pool"}
+            {isLoading ? "Deploying…" : "Deploy Pool"}
           </button>
         </div>
       </form>
@@ -406,9 +533,13 @@ export function CreatePoolPage() {
         open={successModal}
         onClose={() => {
           setSuccess(false);
-          navigate("/dashbar/explore");
+          navigate(
+            createdPoolAddress
+              ? `/dashbar/pool/${createdPoolAddress}`
+              : "/dashbar/explore",
+          );
         }}
-        title="Pool Deployed!"
+        title="Pool Deployed On-Chain"
       >
         <div className="text-center py-4">
           <p className="text-5xl mb-4">🎉</p>
@@ -416,24 +547,41 @@ export function CreatePoolPage() {
             Your pool <strong>{form.poolName}</strong> has been deployed.
           </p>
           <p className="text-sm text-slate-500 mb-6">
-            Transaction submitted. It will appear in Explorer once confirmed.
+            The transaction was confirmed on-chain and the new pool is ready.
           </p>
-          <button
-            onClick={() => {
-              setSuccess(false);
-              navigate("/dashbar/explore");
-            }}
-            className="px-6 py-2.5 text-sm font-semibold rounded-lg bg-[#07182b] text-white hover:bg-teal-700 transition-colors cursor-pointer"
-          >
-            View in Explorer
-          </button>
+          {createdPoolAddress && (
+            <p className="text-xs text-slate-500 font-mono mb-4 break-all">
+              {createdPoolAddress}
+            </p>
+          )}
+          <div className="flex justify-center gap-3 flex-wrap">
+            {createdPoolAddress && (
+              <button
+                onClick={() => {
+                  setSuccess(false);
+                  navigate(`/dashbar/pool/${createdPoolAddress}`);
+                }}
+                className="px-6 py-2.5 text-sm font-semibold rounded-lg bg-teal-700 text-white hover:bg-teal-600 transition-colors cursor-pointer"
+              >
+                Open Pool
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setSuccess(false);
+                navigate("/dashbar/explore");
+              }}
+              className="px-6 py-2.5 text-sm font-semibold rounded-lg bg-[#07182b] text-white hover:bg-teal-700 transition-colors cursor-pointer"
+            >
+              View in Explorer
+            </button>
+          </div>
         </div>
       </Modal>
     </div>
   );
 }
 
-/* ── Small helpers ── */
 function Fieldset({
   title,
   desc,

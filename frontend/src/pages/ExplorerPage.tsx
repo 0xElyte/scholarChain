@@ -76,8 +76,9 @@ export function ExplorerPage() {
               Grant Pool Explorer
             </h1>
             <p className="text-sm text-slate-500 mt-2 max-w-xl">
-              Browse {loading ? "..." : pools.length} scholarship pools, compare
-              funding state, and find open opportunities for scholars or donors.
+              Browse {loading ? "..." : pools.length} grant pools, compare
+              funding state, and find open opportunities for grant applicants or
+              donors.
             </p>
           </div>
           <img

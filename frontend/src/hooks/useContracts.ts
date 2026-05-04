@@ -50,8 +50,4 @@ export const useFactoryContract = (withSigner = false) => {
   }, [withSigner, signer, readOnlyProvider, contractAddress]);
 };
 
-export const multicallContract = new Contract{
-  import.meta.env.VITE_MULTICALL_CONTRACT_ADDRESS,
-  multicallABI,
-  readOnlyProvider,
-}
+// multicall not used; create via useRunners when needed

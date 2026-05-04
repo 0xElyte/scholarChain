@@ -12,22 +12,7 @@ export function DashbarLayout() {
     <div className="min-h-screen bg-[#eef6f4] pt-16">
       <div className="mx-auto flex max-w-[1440px]">
         <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-72 shrink-0 border-r border-cyan-950/10 bg-white/90 p-5 backdrop-blur-xl lg:block">
-          <Link
-            to="/"
-            className="mb-8 flex items-center gap-3 rounded-2xl border border-cyan-950/10 bg-white p-3 shadow-sm"
-          >
-            <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-white">
-              <img
-                src={logo}
-                alt="ScholarChain"
-                className="h-10 w-10 object-contain"
-              />
-            </span>
-            <div>
-              <p className="text-sm font-black text-[#07182b]">ScholarChain</p>
-              <p className="text-xs text-slate-500">Grant workspace</p>
-            </div>
-          </Link>
+          
 
           <nav className="space-y-1">
             {DASH_LINKS.map((item) => (

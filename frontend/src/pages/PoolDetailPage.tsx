@@ -10,6 +10,7 @@ import {
 } from "../utils/format";
 import { useWalletContext } from "../connection/WalletContext";
 import { usePoolDetails } from "../hooks/read-hooks/usePoolDetails";
+import { ipfsGatewayUrl } from "../utils/ipfs";
 
 export function PoolDetailPage() {
   const { wallet } = useWalletContext();
@@ -18,6 +19,7 @@ export function PoolDetailPage() {
 
   const [donateModal, setDonateModal] = useState(false);
   const [proposeModal, setProposeModal] = useState(false);
+  const [criteriaModal, setCriteriaModal] = useState(false);
   const [donateAmount, setDonateAmount] = useState("");
   const [docCID, setDocCID] = useState("");
   const [payoutAddr, setPayoutAddr] = useState("");
@@ -80,6 +82,7 @@ export function PoolDetailPage() {
     pool.isCancelled ||
     (pool.state === "DISTRIBUTING" && pool.winners.length === 0);
   const canCancel = isCreator && pool.state === "PENDING";
+  const criteriaGatewayUrl = ipfsGatewayUrl(pool.criteriaMetadataCID);
 
   const ROLE_COLORS: Record<UserRole, string> = {
     creator: "bg-teal-50 text-teal-700 border-teal-200",
@@ -142,9 +145,8 @@ export function PoolDetailPage() {
         <p className="text-sm text-slate-500">
           Created by{" "}
           <span className="font-mono">{shortAddr(pool.creator)}</span>
-          {" · "}
-          Contract{" "}
-          <span className="font-mono">{shortAddr(pool.poolAddress)}</span>
+          
+          
         </p>
       </div>
 
@@ -381,14 +383,25 @@ export function PoolDetailPage() {
             <p className="text-xs font-mono text-slate-600 break-all mb-2">
               {pool.criteriaMetadataCID}
             </p>
-            <a
-              href={`https://ipfs.io/ipfs/${pool.criteriaMetadataCID}`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-teal-700 hover:underline no-underline"
-            >
-              View on IPFS ↗
-            </a>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => setCriteriaModal(true)}
+                className="text-xs text-teal-700 hover:underline no-underline cursor-pointer"
+              >
+                View PDF
+              </button>
+              {criteriaGatewayUrl && (
+                <a
+                  href={criteriaGatewayUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-slate-500 hover:text-teal-700 hover:underline no-underline"
+                >
+                  Open gateway link ↗
+                </a>
+              )}
+            </div>
           </Card>
 
           <Card title="Contract">
@@ -518,6 +531,29 @@ export function PoolDetailPage() {
           >
             Submit
           </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={criteriaModal}
+        onClose={() => setCriteriaModal(false)}
+        title="Criteria PDF"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            The criteria document is stored on IPFS and rendered below.
+          </p>
+          {criteriaGatewayUrl ? (
+            <iframe
+              src={criteriaGatewayUrl}
+              title="Criteria PDF preview"
+              className="w-full h-[70vh] rounded-xl border border-slate-200 bg-white"
+            />
+          ) : (
+            <p className="text-sm text-slate-500">
+              No criteria PDF link is available.
+            </p>
+          )}
         </div>
       </Modal>
     </div>

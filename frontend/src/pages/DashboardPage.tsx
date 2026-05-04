@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import { MOCK_POOLS } from "../data/mockData";
 import { PoolCard } from "../components/PoolCard";
 import { formatUSDT } from "../utils/format";
 import { useWalletContext } from "../connection/WalletContext";
@@ -7,6 +6,7 @@ import { useTotalPools } from "../hooks/read-hooks/useTotalPools";
 import { useTotalDeposited } from "../hooks/read-hooks/useTotalDeposited";
 import { useActivePools } from "../hooks/read-hooks/useActivePools";
 import { usePaidScholarStats } from "../hooks/read-hooks/usePaidScholarStats";
+import { useAllPools } from "../hooks/read-hooks/useAllPools";
 
 const DASHBOARD_PHOTO =
   "https://images.unsplash.com/photo-1764213077313-41b4dc822d8c?auto=format&fit=crop&w=900&q=80";
@@ -18,10 +18,11 @@ export function DashboardPage() {
   const activePoolsCount = useActivePools();
   const totalDeposited = useTotalDeposited();
   const paidScholarStats = usePaidScholarStats();
+  const { pools: allPools } = useAllPools();
 
-  const myCreated = MOCK_POOLS.filter((p) => p.creator.toLowerCase() === addr);
-  const mySigning = MOCK_POOLS.filter((p) =>
-    p.signers.some((s) => s.toLowerCase() === addr),
+  const myCreated = allPools.filter((p) => p.creator?.toLowerCase() === addr);
+  const mySigning = allPools.filter(
+    (p) => p.signers && p.signers.some((s) => s.toLowerCase() === addr),
   );
   const pendingVotes = mySigning.filter(
     (p) => p.state === "ACTIVE" || p.state === "REVIEW",
@@ -39,10 +40,7 @@ export function DashboardPage() {
             <h1 className="text-2xl sm:text-3xl font-black text-[#07182b]">
               Welcome back
             </h1>
-            <p className="text-sm text-slate-500 mt-2">
-              {wallet.address?.slice(0, 6)}...{wallet.address?.slice(-4)} - your
-              ScholarChain overview
-            </p>
+           
           </div>
           <img
             src={DASHBOARD_PHOTO}
@@ -82,7 +80,7 @@ export function DashboardPage() {
             color: "text-amber-600",
           },
           {
-            label: "Scholars Funded",
+            label: "Beneficiaries Funded",
             value: paidScholarStats.totalPaidScholars,
             sub: `$${formatUSDT(paidScholarStats.totalPaidAmount)} claimed`,
             color: "text-emerald-600",
@@ -205,7 +203,7 @@ export function DashboardPage() {
           </Link>
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {MOCK_POOLS.slice(0, 4).map((p) => (
+          {allPools.slice(0, 4).map((p) => (
             <PoolCard
               key={p.address}
               pool={p}

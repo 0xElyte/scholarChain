@@ -1,601 +1,749 @@
 [
   {
+    "type": "constructor",
     "inputs": [
       {
-        "internalType": "address",
         "name": "_treasury",
-        "type": "address"
+        "type": "address",
+        "internalType": "address"
       },
       {
-        "internalType": "address",
         "name": "_sbtContract",
-        "type": "address"
+        "type": "address",
+        "internalType": "address"
       },
       {
-        "internalType": "uint256",
         "name": "_treasuryFeeBps",
-        "type": "uint256"
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
-    "stateMutability": "nonpayable",
-    "type": "constructor"
+    "stateMutability": "nonpayable"
   },
   {
-    "inputs": [],
-    "type": "error",
-    "name": "AccessControlBadConfirmation"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "account",
-        "type": "address"
-      },
-      {
-        "internalType": "bytes32",
-        "name": "neededRole",
-        "type": "bytes32"
-      }
-    ],
-    "type": "error",
-    "name": "AccessControlUnauthorizedAccount"
-  },
-  {
-    "inputs": [],
-    "type": "error",
-    "name": "EnforcedPause"
-  },
-  {
-    "inputs": [],
-    "type": "error",
-    "name": "ExpectedPause"
-  },
-  {
-    "inputs": [],
-    "type": "error",
-    "name": "Factory__DuplicateOrZeroSigner"
-  },
-  {
-    "inputs": [],
-    "type": "error",
-    "name": "Factory__EmptyFieldDefinitions"
-  },
-  {
-    "inputs": [],
-    "type": "error",
-    "name": "Factory__EmptyPoolName"
-  },
-  {
-    "inputs": [],
-    "type": "error",
-    "name": "Factory__InvalidFeeBps"
-  },
-  {
-    "inputs": [],
-    "type": "error",
-    "name": "Factory__NotAContract"
-  },
-  {
-    "inputs": [],
-    "type": "error",
-    "name": "Factory__ReviewDurationTooShort"
-  },
-  {
-    "inputs": [],
-    "type": "error",
-    "name": "Factory__SubmissionStartInPast"
-  },
-  {
-    "inputs": [],
-    "type": "error",
-    "name": "Factory__SubmissionWindowTooShort"
-  },
-  {
-    "inputs": [],
-    "type": "error",
-    "name": "Factory__TooFewSigners"
-  },
-  {
-    "inputs": [],
-    "type": "error",
-    "name": "Factory__TooManyFields"
-  },
-  {
-    "inputs": [],
-    "type": "error",
-    "name": "Factory__TooManySigners"
-  },
-  {
-    "inputs": [],
-    "type": "error",
-    "name": "Factory__ZeroAddress"
-  },
-  {
-    "inputs": [],
-    "type": "error",
-    "name": "Factory__ZeroCID"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "account",
-        "type": "address",
-        "indexed": false
-      }
-    ],
-    "type": "event",
-    "name": "Paused",
-    "anonymous": false
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "poolAddress",
-        "type": "address",
-        "indexed": true
-      },
-      {
-        "internalType": "address",
-        "name": "creator",
-        "type": "address",
-        "indexed": true
-      },
-      {
-        "internalType": "string",
-        "name": "poolName",
-        "type": "string",
-        "indexed": false
-      }
-    ],
-    "type": "event",
-    "name": "PoolCreated",
-    "anonymous": false
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "role",
-        "type": "bytes32",
-        "indexed": true
-      },
-      {
-        "internalType": "bytes32",
-        "name": "previousAdminRole",
-        "type": "bytes32",
-        "indexed": true
-      },
-      {
-        "internalType": "bytes32",
-        "name": "newAdminRole",
-        "type": "bytes32",
-        "indexed": true
-      }
-    ],
-    "type": "event",
-    "name": "RoleAdminChanged",
-    "anonymous": false
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "role",
-        "type": "bytes32",
-        "indexed": true
-      },
-      {
-        "internalType": "address",
-        "name": "account",
-        "type": "address",
-        "indexed": true
-      },
-      {
-        "internalType": "address",
-        "name": "sender",
-        "type": "address",
-        "indexed": true
-      }
-    ],
-    "type": "event",
-    "name": "RoleGranted",
-    "anonymous": false
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "role",
-        "type": "bytes32",
-        "indexed": true
-      },
-      {
-        "internalType": "address",
-        "name": "account",
-        "type": "address",
-        "indexed": true
-      },
-      {
-        "internalType": "address",
-        "name": "sender",
-        "type": "address",
-        "indexed": true
-      }
-    ],
-    "type": "event",
-    "name": "RoleRevoked",
-    "anonymous": false
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "newSBT",
-        "type": "address",
-        "indexed": true
-      }
-    ],
-    "type": "event",
-    "name": "SBTContractUpdated",
-    "anonymous": false
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "oldTreasury",
-        "type": "address",
-        "indexed": true
-      },
-      {
-        "internalType": "address",
-        "name": "newTreasury",
-        "type": "address",
-        "indexed": true
-      }
-    ],
-    "type": "event",
-    "name": "TreasuryUpdated",
-    "anonymous": false
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "account",
-        "type": "address",
-        "indexed": false
-      }
-    ],
-    "type": "event",
-    "name": "Unpaused",
-    "anonymous": false
-  },
-  {
-    "inputs": [],
-    "stateMutability": "view",
     "type": "function",
     "name": "DEFAULT_ADMIN_ROLE",
+    "inputs": [],
     "outputs": [
       {
-        "internalType": "bytes32",
         "name": "",
-        "type": "bytes32"
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
-    ]
+    ],
+    "stateMutability": "view"
   },
   {
-    "inputs": [],
-    "stateMutability": "view",
     "type": "function",
     "name": "TREASURY_FEE_BPS",
+    "inputs": [],
     "outputs": [
       {
-        "internalType": "uint256",
         "name": "",
-        "type": "uint256"
+        "type": "uint256",
+        "internalType": "uint256"
       }
-    ]
+    ],
+    "stateMutability": "view"
   },
   {
+    "type": "function",
+    "name": "createPool",
     "inputs": [
       {
-        "internalType": "struct ScholarChainFactory.CreatePoolParams",
         "name": "p",
         "type": "tuple",
+        "internalType": "struct ScholarChainFactory.CreatePoolParams",
         "components": [
           {
-            "internalType": "string",
             "name": "poolName",
-            "type": "string"
+            "type": "string",
+            "internalType": "string"
           },
           {
-            "internalType": "bytes32",
             "name": "criteriaMetadataCID",
-            "type": "bytes32"
+            "type": "bytes32",
+            "internalType": "bytes32"
           },
           {
-            "internalType": "uint256",
             "name": "submissionStart",
-            "type": "uint256"
+            "type": "uint256",
+            "internalType": "uint256"
           },
           {
-            "internalType": "uint256",
             "name": "submissionEnd",
-            "type": "uint256"
+            "type": "uint256",
+            "internalType": "uint256"
           },
           {
-            "internalType": "uint256",
             "name": "reviewDuration",
-            "type": "uint256"
+            "type": "uint256",
+            "internalType": "uint256"
           },
           {
-            "internalType": "address[]",
             "name": "initialSigners",
-            "type": "address[]"
+            "type": "address[]",
+            "internalType": "address[]"
           },
           {
-            "internalType": "address",
             "name": "usdtTokenAddress",
-            "type": "address"
+            "type": "address",
+            "internalType": "address"
           },
           {
-            "internalType": "struct FieldDefinition[]",
             "name": "fieldDefinitions",
             "type": "tuple[]",
+            "internalType": "struct FieldDefinition[]",
             "components": [
               {
-                "internalType": "enum FieldType",
                 "name": "fieldType",
-                "type": "uint8"
+                "type": "uint8",
+                "internalType": "enum FieldType"
               },
               {
-                "internalType": "string",
                 "name": "label",
-                "type": "string"
+                "type": "string",
+                "internalType": "string"
               },
               {
-                "internalType": "bool",
                 "name": "required",
-                "type": "bool"
+                "type": "bool",
+                "internalType": "bool"
               }
             ]
           }
         ]
       }
     ],
-    "stateMutability": "nonpayable",
-    "type": "function",
-    "name": "createPool",
     "outputs": [
       {
-        "internalType": "address",
         "name": "poolAddress",
-        "type": "address"
+        "type": "address",
+        "internalType": "address"
       }
-    ]
+    ],
+    "stateMutability": "nonpayable"
   },
   {
+    "type": "function",
+    "name": "getAllPoolSummaries",
     "inputs": [],
-    "stateMutability": "view",
+    "outputs": [
+      {
+        "name": "summaries",
+        "type": "tuple[]",
+        "internalType": "struct PoolSummary[]",
+        "components": [
+          {
+            "name": "poolAddress",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "poolName",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "state",
+            "type": "uint8",
+            "internalType": "enum PoolStateEnum"
+          },
+          {
+            "name": "creator",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "totalDeposited",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "submissionStart",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "submissionEnd",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "reviewEnd",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "signerCount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "winnersCount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "claimedCount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "proposalCount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "distributionAmount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "distributionEntered",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "isCancelled",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
     "type": "function",
     "name": "getAllPools",
+    "inputs": [],
     "outputs": [
       {
-        "internalType": "address[]",
         "name": "",
-        "type": "address[]"
-      }
-    ]
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "creator",
-        "type": "address"
+        "type": "address[]",
+        "internalType": "address[]"
       }
     ],
-    "stateMutability": "view",
+    "stateMutability": "view"
+  },
+  {
     "type": "function",
     "name": "getPoolsByCreator",
-    "outputs": [
-      {
-        "internalType": "address[]",
-        "name": "",
-        "type": "address[]"
-      }
-    ]
-  },
-  {
     "inputs": [
       {
-        "internalType": "bytes32",
-        "name": "role",
-        "type": "bytes32"
+        "name": "creator",
+        "type": "address",
+        "internalType": "address"
       }
     ],
-    "stateMutability": "view",
+    "outputs": [
+      {
+        "name": "",
+        "type": "address[]",
+        "internalType": "address[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getProtocolStats",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "totalPools",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "activePools",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "totalDeposited",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "totalWinners",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "totalGrantsClaimed",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "totalProposals",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
     "type": "function",
     "name": "getRoleAdmin",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
     "outputs": [
       {
-        "internalType": "bytes32",
         "name": "",
-        "type": "bytes32"
-      }
-    ]
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "role",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "address",
-        "name": "account",
-        "type": "address"
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
-    "stateMutability": "nonpayable",
+    "stateMutability": "view"
+  },
+  {
     "type": "function",
-    "name": "grantRole"
-  },
-  {
-    "inputs": [
+    "name": "getTotalPoolCount",
+    "inputs": [],
+    "outputs": [
       {
-        "internalType": "bytes32",
-        "name": "role",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "address",
-        "name": "account",
-        "type": "address"
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
-    "stateMutability": "view",
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "grantRole",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
     "type": "function",
     "name": "hasRole",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
     "outputs": [
       {
-        "internalType": "bool",
         "name": "",
-        "type": "bool"
+        "type": "bool",
+        "internalType": "bool"
       }
-    ]
+    ],
+    "stateMutability": "view"
   },
   {
-    "inputs": [],
-    "stateMutability": "nonpayable",
     "type": "function",
-    "name": "pause"
+    "name": "pause",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
-    "inputs": [],
-    "stateMutability": "view",
     "type": "function",
     "name": "paused",
+    "inputs": [],
     "outputs": [
       {
-        "internalType": "bool",
         "name": "",
-        "type": "bool"
+        "type": "bool",
+        "internalType": "bool"
       }
-    ]
+    ],
+    "stateMutability": "view"
   },
   {
+    "type": "function",
+    "name": "renounceRole",
     "inputs": [
       {
-        "internalType": "bytes32",
         "name": "role",
-        "type": "bytes32"
+        "type": "bytes32",
+        "internalType": "bytes32"
       },
       {
-        "internalType": "address",
         "name": "callerConfirmation",
-        "type": "address"
+        "type": "address",
+        "internalType": "address"
       }
     ],
-    "stateMutability": "nonpayable",
-    "type": "function",
-    "name": "renounceRole"
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
+    "type": "function",
+    "name": "revokeRole",
     "inputs": [
       {
-        "internalType": "bytes32",
         "name": "role",
-        "type": "bytes32"
+        "type": "bytes32",
+        "internalType": "bytes32"
       },
       {
-        "internalType": "address",
         "name": "account",
-        "type": "address"
+        "type": "address",
+        "internalType": "address"
       }
     ],
-    "stateMutability": "nonpayable",
-    "type": "function",
-    "name": "revokeRole"
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
-    "inputs": [],
-    "stateMutability": "view",
     "type": "function",
     "name": "sbtContract",
+    "inputs": [],
     "outputs": [
       {
-        "internalType": "address",
         "name": "",
-        "type": "address"
+        "type": "address",
+        "internalType": "address"
       }
-    ]
+    ],
+    "stateMutability": "view"
   },
   {
+    "type": "function",
+    "name": "setSBTContract",
     "inputs": [
       {
-        "internalType": "address",
         "name": "_newSBT",
-        "type": "address"
+        "type": "address",
+        "internalType": "address"
       }
     ],
-    "stateMutability": "nonpayable",
-    "type": "function",
-    "name": "setSBTContract"
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
+    "type": "function",
+    "name": "setTreasury",
     "inputs": [
       {
-        "internalType": "address",
         "name": "_newTreasury",
-        "type": "address"
+        "type": "address",
+        "internalType": "address"
       }
     ],
-    "stateMutability": "nonpayable",
-    "type": "function",
-    "name": "setTreasury"
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
-    "inputs": [
-      {
-        "internalType": "bytes4",
-        "name": "interfaceId",
-        "type": "bytes4"
-      }
-    ],
-    "stateMutability": "view",
     "type": "function",
     "name": "supportsInterface",
+    "inputs": [
+      {
+        "name": "interfaceId",
+        "type": "bytes4",
+        "internalType": "bytes4"
+      }
+    ],
     "outputs": [
       {
-        "internalType": "bool",
         "name": "",
-        "type": "bool"
+        "type": "bool",
+        "internalType": "bool"
       }
-    ]
+    ],
+    "stateMutability": "view"
   },
   {
-    "inputs": [],
-    "stateMutability": "view",
     "type": "function",
     "name": "treasury",
+    "inputs": [],
     "outputs": [
       {
-        "internalType": "address",
         "name": "",
-        "type": "address"
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "unpause",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "Paused",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "PoolCreated",
+    "inputs": [
+      {
+        "name": "poolAddress",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "creator",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "poolName",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RoleAdminChanged",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "previousAdminRole",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "newAdminRole",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RoleGranted",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "sender",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RoleRevoked",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "sender",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SBTContractUpdated",
+    "inputs": [
+      {
+        "name": "newSBT",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TreasuryUpdated",
+    "inputs": [
+      {
+        "name": "oldTreasury",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newTreasury",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Unpaused",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "AccessControlBadConfirmation",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "AccessControlUnauthorizedAccount",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "neededRole",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ]
   },
   {
-    "inputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function",
-    "name": "unpause"
+    "type": "error",
+    "name": "EnforcedPause",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ExpectedPause",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Factory__DuplicateOrZeroSigner",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Factory__EmptyFieldDefinitions",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Factory__EmptyPoolName",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Factory__InvalidFeeBps",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Factory__NotAContract",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Factory__ReviewDurationTooShort",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Factory__SubmissionStartInPast",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Factory__SubmissionWindowTooShort",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Factory__TooFewSigners",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Factory__TooManyFields",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Factory__TooManySigners",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Factory__ZeroAddress",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Factory__ZeroCID",
+    "inputs": []
   }
 ]
