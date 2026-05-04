@@ -16,8 +16,9 @@ interface FormState {
   submissionEnd: string;
   reviewDuration: string;
   signers: string[];
-  usdtTokenAddress: string;
 }
+
+const DEFAULT_USDT_ADDRESS = (import.meta.env.VITE_MOCK_USDT_ADDRESS || "").trim();
 
 const EMPTY_FORM: FormState = {
   poolName: "",
@@ -27,10 +28,11 @@ const EMPTY_FORM: FormState = {
   submissionEnd: "",
   reviewDuration: "7",
   signers: ["", "", ""],
-  usdtTokenAddress: "",
 };
 
-type FormErrors = Partial<Record<keyof FormState | "fields", string>>;
+type FormErrors = Partial<
+  Record<keyof FormState | "fields" | "usdtTokenAddress", string>
+>;
 
 const CREATE_POOL_PHOTO =
   "https://images.unsplash.com/photo-1741699428220-65f37f3fbbcb?auto=format&fit=crop&w=1000&q=80";
@@ -154,9 +156,11 @@ export function CreatePoolPage() {
       e.signers = "Need at least 3 unique valid 0x addresses.";
     }
 
-    if (!form.usdtTokenAddress.trim()) e.usdtTokenAddress = "Required.";
-    else if (!isAddress(form.usdtTokenAddress.trim()))
-      e.usdtTokenAddress = "Enter a valid ERC-20 contract address.";
+    if (!DEFAULT_USDT_ADDRESS) {
+      e.usdtTokenAddress = "Mock USDT is not configured. Set VITE_MOCK_USDT_ADDRESS in frontend/.env.";
+    } else if (!isAddress(DEFAULT_USDT_ADDRESS)) {
+      e.usdtTokenAddress = "Configured VITE_MOCK_USDT_ADDRESS is not a valid address.";
+    }
 
     if (fields.some((field) => !field.label.trim())) {
       e.fields = "All field labels are required.";
@@ -178,7 +182,7 @@ export function CreatePoolPage() {
         submissionEnd: new Date(form.submissionEnd),
         reviewDuration: Number(form.reviewDuration),
         signers: form.signers,
-        usdtTokenAddress: form.usdtTokenAddress,
+        usdtTokenAddress: DEFAULT_USDT_ADDRESS,
         fields,
       });
       setSuccess(true);
@@ -388,23 +392,6 @@ export function CreatePoolPage() {
               + Add Reviewer
             </button>
           )}
-        </Fieldset>
-
-        <Fieldset title="Funding">
-          <Field
-            label="USDT Token Address"
-            error={errors.usdtTokenAddress}
-            hint="The ERC-20 USDT contract on the target network."
-            required
-          >
-            <input
-              type="text"
-              placeholder="0x…"
-              value={form.usdtTokenAddress}
-              onChange={(e) => setField("usdtTokenAddress", e.target.value)}
-              className={`${input(errors.usdtTokenAddress)} font-mono`}
-            />
-          </Field>
         </Fieldset>
 
         <Fieldset
