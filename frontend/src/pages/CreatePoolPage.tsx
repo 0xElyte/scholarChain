@@ -422,7 +422,6 @@ export function CreatePoolPage() {
                 >
                   <option value={FieldType.TEXT}>Text</option>
                   <option value={FieldType.URL}>URL</option>
-                  <option value={FieldType.DOCUMENT}>Document</option>
                 </select>
                 <input
                   type="text"

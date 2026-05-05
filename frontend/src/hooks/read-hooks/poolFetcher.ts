@@ -18,6 +18,7 @@ export interface PoolDetailsData {
   isCancelled: boolean;
   signers: string[];
   winners: string[];
+  proposalCount: number;
   fieldDefinitions: Array<{
     label: string;
     fieldType: number;
@@ -65,6 +66,7 @@ export async function fetchPoolDetails(
   const reviewEnd = summary.reviewEnd;
   const totalDeposited = summary.totalDeposited;
   const distributionAmount = summary.distributionAmount;
+  const proposalCount = summary.proposalCount;
   const distributionEntered = summary.distributionEntered;
   const isCancelled = summary.isCancelled;
 
@@ -80,13 +82,14 @@ export async function fetchPoolDetails(
     criteriaMetadataCID: bytes32ToCid(criteriaMetadataCID as string),
     totalDeposited: totalDeposited.toString(),
     distributionAmount: distributionAmount.toString(),
+    proposalCount: Number(proposalCount ?? 0),
     distributionEntered,
     isCancelled,
     signers,
     winners,
     fieldDefinitions: fieldDefinitions.map((f: any) => ({
       label: f.label,
-      fieldType: f.fieldType,
+      fieldType: Number(f.fieldType),
       required: f.required,
     })),
   };
