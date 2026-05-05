@@ -68,7 +68,8 @@ export function PoolCard({ pool, connectedAddress }: Props) {
 
       <div className="border-t border-slate-100 pt-3 flex items-center justify-between gap-2">
         <span className="text-[11px] text-slate-400">
-          {pool.signerCount} reviewers · {formatDate(pool.submissionEnd * 1000)}
+          {pool.signerCount} reviewers · {pool.proposalCount} proposals ·{" "}
+          {formatDate(pool.submissionEnd * 1000)}
         </span>
         <div className="flex gap-1.5">
           {isCreator && (

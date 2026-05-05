@@ -39,9 +39,6 @@ export function PoolDetailPage() {
   const [benefactorDocumentName, setBenefactorDocumentName] = useState("");
   const [uploadingMainDoc, setUploadingMainDoc] = useState(false);
   const [fieldValues, setFieldValues] = useState<FieldInputValue[]>([]);
-  const [uploadingFieldIndex, setUploadingFieldIndex] = useState<number | null>(
-    null,
-  );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [payoutAddr, setPayoutAddr] = useState("");
   const [txPending, setTxPending] = useState(false);
@@ -180,39 +177,12 @@ export function PoolDetailPage() {
     }
   }
 
-  async function uploadFieldDocument(index: number, file: File | null) {
-    if (!file) return;
-    setSubmitError(null);
-    setUploadingFieldIndex(index);
-    try {
-      const cid = await uploadFileToPinata(
-        file,
-        `${pool!.poolName}-field-${index + 1}-${Date.now()}`,
-      );
-      setFieldValues((prev) => {
-        const next = [...prev];
-        next[index] = {
-          ...(next[index] || { text: "", cid: "", fileName: "" }),
-          cid,
-          fileName: file.name,
-        };
-        return next;
-      });
-    } catch (err) {
-      setSubmitError(
-        err instanceof Error ? err.message : "Failed to upload field document",
-      );
-    } finally {
-      setUploadingFieldIndex(null);
-    }
-  }
-
   function validateProposalForm() {
     if (!wallet.isConnected || !signer) {
       return "Connect your wallet to submit a proposal.";
     }
     if (!benefactorDocumentCid) {
-      return "Upload your benefactor document before submitting.";
+      return "Upload your proposal document before submitting.";
     }
     if (!isAddress(payoutAddr.trim())) {
       return "Enter a valid payout address.";
@@ -222,11 +192,7 @@ export function PoolDetailPage() {
       const definition = pool!.fieldDefinitions[i];
       if (!definition.required) continue;
       const fieldValue = fieldValues[i] || { text: "", cid: "" };
-      if (definition.fieldType === 2) {
-        if (!fieldValue.cid) {
-          return `Upload the required document for "${definition.label}".`;
-        }
-      } else if (!fieldValue.text.trim()) {
+      if (!fieldValue.text.trim()) {
         return `Fill the required field "${definition.label}".`;
       }
     }
@@ -259,14 +225,18 @@ export function PoolDetailPage() {
             label: definition.label,
             fieldType: definition.fieldType,
             required: definition.required,
-            value:
-              definition.fieldType === 2 ? fieldValue.cid : fieldValue.text,
+            value: fieldValue.text,
           };
         }),
       };
 
+      const payloadJson = JSON.stringify(
+        payload,
+        (_, value) => (typeof value === "bigint" ? value.toString() : value),
+        2,
+      );
       const payloadFile = new File(
-        [JSON.stringify(payload, null, 2)],
+        [payloadJson],
         `proposal-${Date.now()}.json`,
         { type: "application/json" },
       );
@@ -433,6 +403,11 @@ export function PoolDetailPage() {
                   c: "text-slate-800",
                 },
                 {
+                  l: "Submitted Proposals",
+                  v: `${pool.proposalCount}`,
+                  c: "text-slate-800",
+                },
+                {
                   l: "Submissions Close",
                   v: formatDate(pool.submissionEnd * 1000),
                   c: "text-slate-800",
@@ -487,16 +462,10 @@ export function PoolDetailPage() {
                     className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
                       f.fieldType === 0
                         ? "bg-slate-100 text-slate-600 border-slate-300"
-                        : f.fieldType === 1
-                          ? "bg-teal-50 text-teal-700 border-teal-200"
-                          : "bg-teal-50 text-teal-700 border-teal-200"
+                        : "bg-teal-50 text-teal-700 border-teal-200"
                     }`}
                   >
-                    {f.fieldType === 0
-                      ? "Text"
-                      : f.fieldType === 1
-                        ? "URL"
-                        : "Upload"}
+                    {f.fieldType === 1 ? "URL" : "Text"}
                   </span>
                   <span className="text-sm text-slate-700 flex-1">
                     {f.label}
@@ -713,7 +682,7 @@ export function PoolDetailPage() {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
-              Benefactor Document <span className="text-red-500">*</span>
+              Proposal Document <span className="text-red-500">*</span>
             </label>
             <input
               type="file"
@@ -731,8 +700,7 @@ export function PoolDetailPage() {
               </p>
             )}
             <p className="text-xs text-slate-400 mt-1">
-              Upload your proposal/benefactor supporting document. CID is
-              generated automatically.
+              Upload your proposal document. CID is generated automatically.
             </p>
           </div>
           <div>
@@ -764,40 +732,17 @@ export function PoolDetailPage() {
                   {f.label}
                   {f.required && <span className="text-red-500">*</span>}
                 </div>
-                {f.fieldType === 2 ? (
-                  <div>
-                    <input
-                      type="file"
-                      onChange={(e) =>
-                        void uploadFieldDocument(i, e.target.files?.[0] ?? null)
-                      }
-                      className="scholar-input w-full px-3 py-2 text-xs rounded-lg border focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                    {uploadingFieldIndex === i && (
-                      <p className="text-xs text-slate-500 mt-1">
-                        Uploading field document…
-                      </p>
-                    )}
-                    {!!fieldValues[i]?.cid && (
-                      <p className="text-xs text-emerald-600 mt-1 break-all">
-                        Uploaded: {fieldValues[i]?.fileName || "document"} (
-                        {fieldValues[i]?.cid})
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <input
-                    type={f.fieldType === 1 ? "url" : "text"}
-                    value={fieldValues[i]?.text || ""}
-                    onChange={(e) => updateFieldText(i, e.target.value)}
-                    placeholder={
-                      f.fieldType === 1
-                        ? "https://example.com"
-                        : "Enter field value"
-                    }
-                    className="scholar-input w-full px-3 py-2 text-xs rounded-lg border focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
-                )}
+                <input
+                  type={f.fieldType === 1 ? "url" : "text"}
+                  value={fieldValues[i]?.text || ""}
+                  onChange={(e) => updateFieldText(i, e.target.value)}
+                  placeholder={
+                    f.fieldType === 1
+                      ? "https://example.com"
+                      : "Enter field value"
+                  }
+                  className="scholar-input w-full px-3 py-2 text-xs rounded-lg border focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
               </div>
             ))}
           </div>
@@ -811,9 +756,7 @@ export function PoolDetailPage() {
           </button>
           <button
             onClick={() => void handleSubmitProposal()}
-            disabled={
-              txPending || uploadingMainDoc || uploadingFieldIndex !== null
-            }
+            disabled={txPending || uploadingMainDoc}
             className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#07182b] text-white hover:bg-teal-700 disabled:opacity-50 cursor-pointer"
           >
             {txPending ? "Submitting…" : "Submit"}
