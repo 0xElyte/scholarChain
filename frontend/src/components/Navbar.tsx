@@ -7,7 +7,7 @@ import { useWalletContext } from "../connection/WalletContext";
 const NAV_LINKS = [
   { to: "/#how-it-works", label: "How it works" },
   { to: "/#features", label: "Features" },
-  { to: "/#start", label: "Start" },
+  { to: "/#start", label: "Explore Pools" },
 ];
 
 export function Navbar() {

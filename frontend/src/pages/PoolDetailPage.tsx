@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Contract, getAddress, isAddress, parseUnits } from "ethers";
 import type { UserRole } from "../types";
@@ -34,6 +34,7 @@ export function PoolDetailPage() {
   const [donateModal, setDonateModal] = useState(false);
   const [proposeModal, setProposeModal] = useState(false);
   const [criteriaModal, setCriteriaModal] = useState(false);
+  const [distributionModal, setDistributionModal] = useState(false);
   const [donateAmount, setDonateAmount] = useState("");
   const [benefactorDocumentCid, setBenefactorDocumentCid] = useState("");
   const [benefactorDocumentName, setBenefactorDocumentName] = useState("");
@@ -43,13 +44,31 @@ export function PoolDetailPage() {
   const [payoutAddr, setPayoutAddr] = useState("");
   const [txPending, setTxPending] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const { signer } = useRunners();
+  const [hasClaimed, setHasClaimed] = useState(false);
+  const [winnerPayout, setWinnerPayout] = useState<string | null>(null);
+
+  const { signer, readOnlyProvider } = useRunners();
   const { donate, loading: donating } = useDonatePool();
   const {
     balance: usdtBalance,
     rawBalance: usdtRawBalance,
     loading: usdtBalanceLoading,
   } = useUSDTBalance(pool?.usdtTokenAddress, wallet.address || undefined);
+
+  // Hoisted before early returns so hooks are called unconditionally
+  const addr = wallet.address?.toLowerCase();
+  const isWinner = pool?.winners.some((w) => w.toLowerCase() === addr) ?? false;
+
+  useEffect(() => {
+    if (!isWinner || !pool || !readOnlyProvider || !wallet.address) return;
+    const pc = new Contract(getAddress(pool.poolAddress), GrantPoolABI, readOnlyProvider);
+    pc.hasClaimed(wallet.address)
+      .then((claimed: boolean) => setHasClaimed(claimed))
+      .catch(() => {});
+    pc.getProposal(wallet.address)
+      .then((p: any) => setWinnerPayout(p?.payoutAddress ?? null))
+      .catch(() => {});
+  }, [isWinner, pool?.poolAddress, readOnlyProvider, wallet.address]);
 
   if (loading) {
     return (
@@ -87,10 +106,8 @@ export function PoolDetailPage() {
     );
   }
 
-  const addr = wallet.address?.toLowerCase();
   const isCreator = addr === pool.creator.toLowerCase();
   const isSigner = pool.signers.some((s) => s.toLowerCase() === addr);
-  const isWinner = pool.winners.some((w) => w.toLowerCase() === addr);
 
   const roles: UserRole[] = [];
   if (isCreator) roles.push("creator");
@@ -103,19 +120,15 @@ export function PoolDetailPage() {
     pool.state === "ACTIVE" && wallet.isConnected && !isCreator && !isSigner;
   const requestedDonateAmount = (() => {
     if (!donateAmount) return 0n;
-
     try {
       return parseUnits(donateAmount, 6);
     } catch {
       return 0n;
     }
   })();
-  const canDistribute =
-    pool.state === "DISTRIBUTING" && !pool.distributionEntered;
-  const canClaim = pool.state === "DISTRIBUTING" && isWinner;
   const canRefund =
     pool.isCancelled ||
-    (pool.state === "DISTRIBUTING" && pool.winners.length === 0);
+    (pool.state === "DISTRIBUTING" && pool.winners.length === 0 && pool.distributionEntered);
   const canCancel = isCreator && pool.state === "PENDING";
   const criteriaGatewayUrl = ipfsGatewayUrl(pool.criteriaMetadataCID);
 
@@ -137,9 +150,7 @@ export function PoolDetailPage() {
   }
 
   function ensureFieldState() {
-    if (fieldValues.length === pool!.fieldDefinitions.length) {
-      return;
-    }
+    if (fieldValues.length === pool!.fieldDefinitions.length) return;
     setFieldValues(
       pool!.fieldDefinitions.map(() => ({ text: "", cid: "", fileName: "" })),
     );
@@ -187,7 +198,6 @@ export function PoolDetailPage() {
     if (!isAddress(payoutAddr.trim())) {
       return "Enter a valid payout address.";
     }
-
     for (let i = 0; i < pool!.fieldDefinitions.length; i++) {
       const definition = pool!.fieldDefinitions[i];
       if (!definition.required) continue;
@@ -196,7 +206,6 @@ export function PoolDetailPage() {
         return `Fill the required field "${definition.label}".`;
       }
     }
-
     return null;
   }
 
@@ -207,10 +216,8 @@ export function PoolDetailPage() {
       setSubmitError(validationError);
       return;
     }
-
     try {
       setTxPending(true);
-
       const payload = {
         benefactorAddress: wallet.address,
         benefactorDocumentCID: benefactorDocumentCid,
@@ -220,7 +227,6 @@ export function PoolDetailPage() {
             cid: "",
             fileName: "",
           };
-
           return {
             label: definition.label,
             fieldType: definition.fieldType,
@@ -229,7 +235,6 @@ export function PoolDetailPage() {
           };
         }),
       };
-
       const payloadJson = JSON.stringify(
         payload,
         (_, value) => (typeof value === "bigint" ? value.toString() : value),
@@ -240,23 +245,17 @@ export function PoolDetailPage() {
         `proposal-${Date.now()}.json`,
         { type: "application/json" },
       );
-      const payloadCid = await uploadFileToPinata(
-        payloadFile,
-        payloadFile.name,
-      );
-
+      const payloadCid = await uploadFileToPinata(payloadFile, payloadFile.name);
       const proposalContract = new Contract(
         getAddress(pool!.poolAddress),
         GrantPoolABI,
         signer,
       );
-
       const tx = await proposalContract.submitProposal(
         cidToBytes32(payloadCid),
         getAddress(payoutAddr.trim()),
       );
       await tx.wait();
-
       setProposeModal(false);
       setBenefactorDocumentCid("");
       setBenefactorDocumentName("");
@@ -270,6 +269,42 @@ export function PoolDetailPage() {
       setSubmitError(
         err instanceof Error ? err.message : "Failed to submit proposal",
       );
+    } finally {
+      setTxPending(false);
+    }
+  }
+
+  async function handleEnterDistribution() {
+    if (!signer) return;
+    try {
+      setTxPending(true);
+      const pc = new Contract(getAddress(pool!.poolAddress), GrantPoolABI, signer);
+      const tx = await pc.enterDistributionPhase();
+      await tx.wait();
+      setDistributionModal(false);
+      setToast("Distribution phase entered — fee sent to treasury");
+      setTimeout(() => setToast(null), 3500);
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Transaction failed");
+      setTimeout(() => setToast(null), 3500);
+    } finally {
+      setTxPending(false);
+    }
+  }
+
+  async function handleClaimGrant() {
+    if (!signer) return;
+    try {
+      setTxPending(true);
+      const pc = new Contract(getAddress(pool!.poolAddress), GrantPoolABI, signer);
+      const tx = await pc.claimGrant();
+      await tx.wait();
+      setHasClaimed(true);
+      setToast("Grant claimed — funds sent and SBT minted");
+      setTimeout(() => setToast(null), 3500);
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Transaction failed");
+      setTimeout(() => setToast(null), 3500);
     } finally {
       setTxPending(false);
     }
@@ -342,26 +377,6 @@ export function PoolDetailPage() {
             className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#07182b] text-white hover:bg-teal-700 transition-colors cursor-pointer"
           >
             📝 Submit Proposal
-          </button>
-        )}
-        {canDistribute && (
-          <button
-            onClick={() =>
-              stub("Distribution phase entered — 10% fee sent to treasury")
-            }
-            disabled={txPending}
-            className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#07182b] text-white hover:bg-teal-700 disabled:opacity-60 transition-colors cursor-pointer"
-          >
-            🚀 Enter Distribution
-          </button>
-        )}
-        {canClaim && (
-          <button
-            onClick={() => stub("Grant claimed! Funds sent + SBT minted")}
-            disabled={txPending}
-            className="px-4 py-2 text-sm font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 transition-colors cursor-pointer"
-          >
-            🏆 Claim Grant
           </button>
         )}
         {canRefund && (
@@ -480,24 +495,182 @@ export function PoolDetailPage() {
             </div>
           </Card>
 
-          {/* Proposals + voting */}
-          {/* {(pool.state === "ACTIVE" ||
-            pool.state === "REVIEW" ||
-            pool.state === "DISTRIBUTING" ||
-            pool.state === "CLOSED") && (
-            <Card title="Proposals">
-              <div className="p-4 rounded-lg bg-blue-50 border border-blue-200">
-                <p className="text-sm text-blue-700">
-                  💡 Proposals are indexed from blockchain events. To view
-                  detailed proposals, connect to a subgraph or use The Graph
-                  Network once deployed.
-                </p>
-              </div>
+          {/* Distribution section */}
+          {pool.state === "DISTRIBUTING" && (
+            <Card title="Distribution">
+              {!pool.distributionEntered ? (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                    <p className="text-sm font-semibold text-amber-700">
+                      Distribution not yet initialized
+                    </p>
+                  </div>
+                  <p className="text-sm text-slate-600 mb-4">
+                    Entering distribution will deduct the protocol fee and
+                    allocate remaining funds to winners.
+                  </p>
+                  {pool.winners.length === 0 ? (
+                    <div className="rounded-lg bg-orange-50 border border-orange-200 p-3 mb-5">
+                      <p className="text-sm font-medium text-orange-700">
+                        ⚠ No winners selected
+                      </p>
+                      <p className="text-xs text-orange-600 mt-1">
+                        Entering distribution with no winners allows donors to
+                        claim refunds.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg bg-teal-50 border border-teal-200 p-3 mb-5">
+                      <p className="text-xs text-teal-700 font-medium">
+                        {pool.winners.length} winner
+                        {pool.winners.length !== 1 ? "s" : ""} will receive
+                        funds after fee deduction.
+                      </p>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => setDistributionModal(true)}
+                    disabled={txPending}
+                    className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#07182b] text-white hover:bg-teal-700 disabled:opacity-60 transition-colors cursor-pointer"
+                  >
+                    Enter Distribution Phase
+                  </button>
+                </div>
+              ) : pool.winners.length > 0 ? (
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="w-2 h-2 rounded-full bg-teal-400 shrink-0" />
+                    <p className="text-sm font-semibold text-teal-700">
+                      Distribution active
+                    </p>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div className="bg-white rounded-xl p-4 border border-cyan-950/10 shadow-sm">
+                      <p className="text-xs text-slate-500 mb-1">
+                        Amount per winner
+                      </p>
+                      <p className="text-lg font-bold text-slate-800">
+                        {formatUSDTWithCommas(pool.distributionAmount)} USDT
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-xl p-4 border border-cyan-950/10 shadow-sm">
+                      <p className="text-xs text-slate-500 mb-1">
+                        Total winners
+                      </p>
+                      <p className="text-lg font-bold text-slate-800">
+                        {pool.winners.length}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0" />
+                    <p className="text-sm font-semibold text-slate-700">
+                      No winners selected
+                    </p>
+                  </div>
+                  <p className="text-sm text-slate-500">
+                    Funds have been returned to donors.
+                  </p>
+                </div>
+              )}
             </Card>
-          )} */}
+          )}
 
-          {/* My proposal placeholder */}
-          {isWinner && (
+          {/* Claim grant section */}
+          {pool.state === "DISTRIBUTING" && (
+            <Card title="Claim Grant" highlight={isWinner && !hasClaimed}>
+              {isWinner ? (
+                hasClaimed ? (
+                  <div>
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="text-lg">✅</span>
+                      <p className="text-sm font-semibold text-emerald-700">
+                        Grant already claimed
+                      </p>
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-3 mb-3">
+                      <div className="bg-emerald-50 rounded-lg p-3">
+                        <p className="text-xs text-emerald-600 mb-0.5">
+                          Amount received
+                        </p>
+                        <p className="text-sm font-semibold text-emerald-900 font-mono">
+                          {formatUSDTWithCommas(pool.distributionAmount)} USDT
+                        </p>
+                      </div>
+                      {winnerPayout && (
+                        <div className="bg-emerald-50 rounded-lg p-3">
+                          <p className="text-xs text-emerald-600 mb-0.5">
+                            Payout address
+                          </p>
+                          <p className="text-sm font-mono text-emerald-900">
+                            {shortAddr(winnerPayout)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      An SBT has been minted to your wallet as proof of this
+                      grant.
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="text-lg">🎉</span>
+                      <p className="text-sm font-semibold text-teal-800">
+                        You are a selected winner
+                      </p>
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-3 mb-5">
+                      <div className="bg-teal-50 rounded-lg p-3">
+                        <p className="text-xs text-teal-600 mb-0.5">
+                          Grant amount
+                        </p>
+                        <p className="text-sm font-semibold text-teal-900 font-mono">
+                          {formatUSDTWithCommas(pool.distributionAmount)} USDT
+                        </p>
+                      </div>
+                      {winnerPayout && (
+                        <div className="bg-teal-50 rounded-lg p-3">
+                          <p className="text-xs text-teal-600 mb-0.5">
+                            Payout address
+                          </p>
+                          <p className="text-sm font-mono text-teal-900">
+                            {shortAddr(winnerPayout)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    {!pool.distributionEntered ? (
+                      <p className="text-xs text-slate-500">
+                        Waiting for distribution phase to be initialized before
+                        you can claim.
+                      </p>
+                    ) : (
+                      <button
+                        onClick={() => void handleClaimGrant()}
+                        disabled={txPending}
+                        className="px-4 py-2 text-sm font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 transition-colors cursor-pointer"
+                      >
+                        {txPending ? "Claiming…" : "Claim Grant"}
+                      </button>
+                    )}
+                  </div>
+                )
+              ) : (
+                <p className="text-sm text-slate-500">
+                  You were not selected for this pool.
+                </p>
+              )}
+            </Card>
+          )}
+
+          {/* Winner status (non-distributing states) */}
+          {isWinner && pool.state !== "DISTRIBUTING" && (
             <Card title="Your Proposal Status" highlight>
               <div className="grid sm:grid-cols-2 gap-3">
                 <div className="bg-teal-50 rounded-lg p-3">
@@ -587,7 +760,8 @@ export function PoolDetailPage() {
         </div>
       </div>
 
-      {/* Donate modal */}
+      {/* ── Modals ── */}
+
       <Modal
         open={donateModal}
         onClose={() => setDonateModal(false)}
@@ -665,7 +839,6 @@ export function PoolDetailPage() {
         </div>
       </Modal>
 
-      {/* Propose modal */}
       <Modal
         open={proposeModal}
         onClose={() => setProposeModal(false)}
@@ -715,7 +888,6 @@ export function PoolDetailPage() {
               className="scholar-input w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
             />
           </div>
-          {/* Dynamic required fields */}
           <div className="bg-white rounded-xl p-3 space-y-1.5 border border-cyan-950/10 shadow-sm">
             <p className="text-xs font-medium text-slate-600 mb-2">
               Fill the required fields:
@@ -760,6 +932,61 @@ export function PoolDetailPage() {
             className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#07182b] text-white hover:bg-teal-700 disabled:opacity-50 cursor-pointer"
           >
             {txPending ? "Submitting…" : "Submit"}
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={distributionModal}
+        onClose={() => !txPending && setDistributionModal(false)}
+        title="Enter Distribution Phase"
+      >
+        <div className="space-y-4">
+          <div className="rounded-lg bg-amber-50 border border-amber-200 p-4">
+            <p className="text-sm font-semibold text-amber-800 mb-2">
+              Before you confirm:
+            </p>
+            <ul className="text-sm text-amber-700 space-y-1 list-disc list-inside">
+              <li>A protocol fee will be deducted from the pool balance</li>
+              <li>Remaining funds will be allocated equally to winners</li>
+              {pool.winners.length === 0 && (
+                <li className="text-orange-700 font-medium">
+                  No winners selected — donors will receive refunds
+                </li>
+              )}
+            </ul>
+          </div>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Pool</span>
+              <span className="font-semibold text-slate-800">{pool.poolName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Total deposited</span>
+              <span className="font-semibold font-mono text-slate-800">
+                {formatUSDTWithCommas(pool.totalDeposited)} USDT
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Winners</span>
+              <span className="font-semibold text-slate-800">{pool.winners.length}</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 mt-6">
+          <button
+            onClick={() => setDistributionModal(false)}
+            disabled={txPending}
+            className="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-60 cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => void handleEnterDistribution()}
+            disabled={txPending}
+            className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#07182b] text-white hover:bg-teal-700 disabled:opacity-50 cursor-pointer"
+          >
+            {txPending ? "Sending…" : "Confirm Distribution"}
           </button>
         </div>
       </Modal>

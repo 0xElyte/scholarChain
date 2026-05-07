@@ -1,9 +1,11 @@
 import { NavLink, Outlet } from "react-router-dom";
+import { LayoutDashboard, Compass, PlusCircle, ClipboardList } from "lucide-react";
 
 const DASH_LINKS = [
-  { to: "/dashbar/dashboard", label: "Dashboard", icon: "D" },
-  { to: "/dashbar/explore", label: "Explore Pools", icon: "E" },
-  { to: "/dashbar/create", label: "Create Pool", icon: "C" },
+  { to: "/dashbar/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/dashbar/explore", label: "Explore Pools", icon: Compass },
+  { to: "/dashbar/create", label: "Create Pool", icon: PlusCircle },
+  { to: "/dashbar/review", label: "Review", icon: ClipboardList },
 ];
 
 export function DashbarLayout() {
@@ -24,8 +26,8 @@ export function DashbarLayout() {
                   }`
                 }
               >
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/15 text-xs font-black">
-                  {item.icon}
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/15">
+                  <item.icon size={15} />
                 </span>
                 {item.label}
               </NavLink>
