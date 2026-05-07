@@ -4,7 +4,9 @@ import { ABI } from "../data/ABI.js";
 import type { GrantPool, ChainProposal, FieldDefinition, PoolState } from "../types";
 import { FieldType } from "../types";
 
-const SEPOLIA_RPC = "https://ethereum-sepolia-rpc.publicnode.com";
+const SEPOLIA_RPC =
+  (import.meta.env.VITE_SEPOLIA_RPC_URL as string | undefined) ??
+  "https://ethereum-sepolia-rpc.publicnode.com";
 
 const STATE_MAP: PoolState[] = [
   "PENDING", "ACTIVE", "REVIEW", "DISTRIBUTING", "CLOSED", "CANCELLED",
