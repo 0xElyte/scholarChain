@@ -15,6 +15,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { ExplorerPage } from "./pages/ExplorerPage";
 import { CreatePoolPage } from "./pages/CreatePoolPage";
 import { PoolDetailPage } from "./pages/PoolDetailPage";
+import { ReviewPage } from "./pages/ReviewPage";
 import AppkitWrapper from "./connection/AppkitWrapper";
 import { WalletProvider, useWalletContext } from "./connection/WalletContext";
 
@@ -59,6 +60,7 @@ function App() {
                 <Route path="dashboard" element={<DashboardPage />} />
                 <Route path="explore" element={<ExplorerPage />} />
                 <Route path="create" element={<CreatePoolPage />} />
+                <Route path="review" element={<ReviewPage />} />
                 <Route path="pool/:address" element={<PoolDetailPage />} />
               </Route>
               <Route

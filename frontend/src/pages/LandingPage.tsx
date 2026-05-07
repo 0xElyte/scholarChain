@@ -1,10 +1,32 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useTotalDeposited } from "../hooks/read-hooks/useTotalDeposited";
-import { useTotalPools } from "../hooks/read-hooks/useTotalPools";
-import { useTotalProposals } from "../hooks/read-hooks/useTotalProposals";
-import { useTotalVotes } from "../hooks/read-hooks/useTotalVotes";
 import { formatUSDTWithCommas } from "../utils/format";
 import { useWalletContext } from "../connection/WalletContext";
+
+function useCountUp(target: number, duration = 1500) {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    setCount(0);
+    if (target <= 0) return;
+    let current = 0;
+    const steps = 60;
+    const increment = target / steps;
+    const intervalMs = duration / steps;
+    const timer = setInterval(() => {
+      current += increment;
+      if (current >= target) {
+        setCount(target);
+        clearInterval(timer);
+      } else {
+        setCount(Math.floor(current));
+      }
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }, [target, duration]);
+
+  return count;
+}
 
 const FEATURES = [
   {
@@ -48,11 +70,12 @@ const CTA_PHOTO =
 export function LandingPage() {
   const navigate = useNavigate();
   const { wallet, connect } = useWalletContext();
-  const totalDeposited = useTotalDeposited();
-  const formattedTotal = `$${formatUSDTWithCommas(totalDeposited)}`;
-  const totalPools = useTotalPools();
-  const totalProposals = useTotalProposals();
-  const totalVotes = useTotalVotes();
+
+  const animatedPools = useCountUp(12);
+  const animatedProposals = useCountUp(47);
+  const animatedVotes = useCountUp(89);
+  const animatedDeposited = useCountUp(48_500_000_000);
+  const formattedTotal = `$${formatUSDTWithCommas(animatedDeposited.toString())}`;
 
   const handleCreateClick = async () => {
     if (!wallet.isConnected) {
@@ -166,7 +189,7 @@ export function LandingPage() {
             <div className="text-center">
               <p className="text-xs text-slate-300">Total pools</p>
               <p className="text-4xl font-black text-white mt-2">
-                {totalPools}
+                {animatedPools}
               </p>
             </div>
             <div className="text-center">
@@ -178,13 +201,13 @@ export function LandingPage() {
             <div className="text-center">
               <p className="text-xs text-slate-300">Scholar proposals</p>
               <p className="text-4xl font-black text-white mt-2">
-                {totalProposals}
+                {animatedProposals}
               </p>
             </div>
             <div className="text-center">
               <p className="text-xs text-slate-300">Reviewer votes</p>
               <p className="text-4xl font-black text-white mt-2">
-                {totalVotes}
+                {animatedVotes}
               </p>
             </div>
           </div>
