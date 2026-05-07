@@ -6,6 +6,7 @@ import { FieldType } from "../types";
 import { Modal } from "../components/Modal";
 import { useWalletContext } from "../connection/WalletContext";
 import { useDeployPool } from "../hooks/write-hooks/useDeployPool";
+import useDonatePool from "../hooks/write-hooks/useDonatePool";
 import { uploadPdfToPinata } from "../utils/pinata";
 
 interface FormState {
@@ -15,10 +16,13 @@ interface FormState {
   submissionStart: string;
   submissionEnd: string;
   reviewDuration: string;
+  initialDonation: string;
   signers: string[];
 }
 
-const DEFAULT_USDT_ADDRESS = (import.meta.env.VITE_MOCK_USDT_ADDRESS || "").trim();
+const DEFAULT_USDT_ADDRESS = (
+  import.meta.env.VITE_MOCK_USDT_ADDRESS || ""
+).trim();
 
 const EMPTY_FORM: FormState = {
   poolName: "",
@@ -27,6 +31,7 @@ const EMPTY_FORM: FormState = {
   submissionStart: "",
   submissionEnd: "",
   reviewDuration: "7",
+  initialDonation: "",
   signers: ["", "", ""],
 };
 
@@ -46,11 +51,13 @@ export function CreatePoolPage() {
     error: deployError,
     createdPoolAddress,
   } = useDeployPool();
+  const { donate, loading: donating } = useDonatePool();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [fields, setFields] = useState<FieldDefinition[]>([
     { fieldType: FieldType.TEXT, label: "", required: true },
   ]);
   const [successModal, setSuccess] = useState(false);
+  const [postDeployNotice, setPostDeployNotice] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
   const [criteriaUploadState, setCriteriaUploadState] = useState<
     "idle" | "uploading" | "done" | "error"
@@ -133,6 +140,13 @@ export function CreatePoolPage() {
     }
     if (Number(form.reviewDuration) < 1) e.reviewDuration = "Minimum 1 day.";
 
+    if (form.initialDonation.trim()) {
+      const amount = Number(form.initialDonation);
+      if (Number.isNaN(amount) || amount < 0) {
+        e.initialDonation = "Enter a valid USDT amount.";
+      }
+    }
+
     const normalizedSigners: string[] = [];
     const seenSigners = new Set<string>();
     for (const signer of form.signers) {
@@ -157,9 +171,11 @@ export function CreatePoolPage() {
     }
 
     if (!DEFAULT_USDT_ADDRESS) {
-      e.usdtTokenAddress = "Mock USDT is not configured. Set VITE_MOCK_USDT_ADDRESS in frontend/.env.";
+      e.usdtTokenAddress =
+        "Mock USDT is not configured. Set VITE_MOCK_USDT_ADDRESS in frontend/.env.";
     } else if (!isAddress(DEFAULT_USDT_ADDRESS)) {
-      e.usdtTokenAddress = "Configured VITE_MOCK_USDT_ADDRESS is not a valid address.";
+      e.usdtTokenAddress =
+        "Configured VITE_MOCK_USDT_ADDRESS is not a valid address.";
     }
 
     if (fields.some((field) => !field.label.trim())) {
@@ -175,7 +191,9 @@ export function CreatePoolPage() {
     if (!validate()) return;
 
     try {
-      await deployPool({
+      setPostDeployNotice(null);
+
+      const deployedPoolAddress = await deployPool({
         poolName: form.poolName,
         criteriaMetadataCID: form.criteriaMetadataCID,
         submissionStart: new Date(form.submissionStart),
@@ -185,6 +203,29 @@ export function CreatePoolPage() {
         usdtTokenAddress: DEFAULT_USDT_ADDRESS,
         fields,
       });
+
+      const donationAmount = form.initialDonation.trim();
+      if (donationAmount && Number(donationAmount) > 0) {
+        try {
+          await donate(
+            deployedPoolAddress,
+            donationAmount,
+            DEFAULT_USDT_ADDRESS,
+          );
+          setPostDeployNotice(
+            `Initial donation of ${donationAmount} USDT sent.`,
+          );
+        } catch (donationErr) {
+          const donationMessage =
+            donationErr instanceof Error
+              ? donationErr.message
+              : "Initial donation failed.";
+          setPostDeployNotice(
+            `Pool deployed, but the initial donation could not be sent: ${donationMessage}`,
+          );
+        }
+      }
+
       setSuccess(true);
     } catch (err) {
       // Error is already handled by useDeployPool hook
@@ -297,6 +338,21 @@ export function CreatePoolPage() {
                 <p className="text-xs text-red-600">{criteriaUploadError}</p>
               )}
             </div>
+          </Field>
+          <Field
+            label="Initial Donation (USDT)"
+            error={errors.initialDonation}
+            hint="Optional. If filled in, your wallet will approve and donate this amount to the pool immediately after deployment."
+          >
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="e.g. 100"
+              value={form.initialDonation}
+              onChange={(e) => setField("initialDonation", e.target.value)}
+              className={input(errors.initialDonation)}
+            />
           </Field>
         </Fieldset>
 
@@ -507,10 +563,10 @@ export function CreatePoolPage() {
           </button>
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || donating}
             className="px-6 py-2.5 text-sm font-semibold rounded-lg bg-[#07182b] text-white hover:bg-teal-700 disabled:opacity-60 transition-colors cursor-pointer"
           >
-            {isLoading ? "Deploying…" : "Deploy Pool"}
+            {isLoading || donating ? "Deploying…" : "Deploy Pool"}
           </button>
         </div>
       </form>
@@ -535,6 +591,9 @@ export function CreatePoolPage() {
           <p className="text-sm text-slate-500 mb-6">
             The transaction was confirmed on-chain and the new pool is ready.
           </p>
+          {postDeployNotice && (
+            <p className="text-sm text-slate-700 mb-4">{postDeployNotice}</p>
+          )}
           {createdPoolAddress && (
             <p className="text-xs text-slate-500 font-mono mb-4 break-all">
               {createdPoolAddress}
@@ -552,15 +611,17 @@ export function CreatePoolPage() {
                 Open Pool
               </button>
             )}
-            <button
-              onClick={() => {
-                setSuccess(false);
-                navigate("/dashbar/explore");
-              }}
-              className="px-6 py-2.5 text-sm font-semibold rounded-lg bg-[#07182b] text-white hover:bg-teal-700 transition-colors cursor-pointer"
-            >
-              View in Explorer
-            </button>
+            {createdPoolAddress && (
+              <a
+                href={`${((import.meta.env.VITE_BLOCK_EXPLORER_BASE as string) || "https://sepolia.etherscan.io").replace(/\/$/, "")}/address/${createdPoolAddress}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setSuccess(false)}
+                className="px-6 py-2.5 text-sm font-semibold rounded-lg bg-[#07182b] text-white hover:bg-teal-700 transition-colors cursor-pointer"
+              >
+                View on Explorer
+              </a>
+            )}
           </div>
         </div>
       </Modal>

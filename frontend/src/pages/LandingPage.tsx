@@ -1,7 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatUSDTWithCommas } from "../utils/format";
 import { useWalletContext } from "../connection/WalletContext";
+import { useAllPools } from "../hooks/read-hooks/useAllPools";
+import { useTotalPools } from "../hooks/read-hooks/useTotalPools";
+import { useTotalDeposited } from "../hooks/read-hooks/useTotalDeposited";
+import { useTotalProposals } from "../hooks/read-hooks/useTotalProposals";
+import { useTotalVotes } from "../hooks/read-hooks/useTotalVotes";
+import { usePaidScholarStats } from "../hooks/read-hooks/usePaidScholarStats";
 
 function useCountUp(target: number, duration = 1500) {
   const [count, setCount] = useState(0);
@@ -70,12 +76,45 @@ const CTA_PHOTO =
 export function LandingPage() {
   const navigate = useNavigate();
   const { wallet, connect } = useWalletContext();
+  const { pools } = useAllPools();
+  const totalPools = useTotalPools();
+  const totalDeposited = useTotalDeposited();
+  const totalProposals = useTotalProposals();
+  const totalVotes = useTotalVotes();
+  const paidScholarStats = usePaidScholarStats();
 
-  const animatedPools = useCountUp(12);
-  const animatedProposals = useCountUp(47);
-  const animatedVotes = useCountUp(89);
-  const animatedDeposited = useCountUp(48_500_000_000);
+  const totalPoolsCount = Number(totalPools);
+  const totalDepositedAmount = Number(totalDeposited);
+  const totalProposalsCount = Number(totalProposals);
+  const totalVotesCount = Number(totalVotes);
+  const totalPaidScholarsCount = Number(paidScholarStats.totalPaidScholars);
+  const totalPaidAmount = Number(paidScholarStats.totalPaidAmount);
+
+  const animatedPools = useCountUp(totalPoolsCount);
+  const animatedProposals = useCountUp(totalProposalsCount);
+  const animatedVotes = useCountUp(totalVotesCount);
+  const animatedDeposited = useCountUp(totalDepositedAmount);
+  const animatedPaidScholars = useCountUp(totalPaidScholarsCount);
+  const animatedPaidAmount = useCountUp(totalPaidAmount);
   const formattedTotal = `$${formatUSDTWithCommas(animatedDeposited.toString())}`;
+
+  const featuredPool = useMemo(() => {
+    if (!pools.length) return null;
+
+    return [...pools].sort((a, b) => {
+      const activeScore = Number(b.totalDeposited) - Number(a.totalDeposited);
+      if (activeScore !== 0) return activeScore;
+      return b.proposalCount - a.proposalCount;
+    })[0];
+  }, [pools]);
+
+  const featuredPoolBalance = featuredPool
+    ? formatUSDTWithCommas(featuredPool.totalDeposited)
+    : "0";
+  const featuredPoolQuorum = featuredPool
+    ? `${Math.ceil((featuredPool.signerCount * 70) / 100)} / ${featuredPool.signerCount || 0}`
+    : "0 / 0";
+  const featuredPoolStatus = featuredPool?.state ?? "PENDING";
 
   const handleCreateClick = async () => {
     if (!wallet.isConnected) {
@@ -147,31 +186,35 @@ export function LandingPage() {
                       Live pool
                     </p>
                     <span className="rounded-full bg-teal-50 text-teal-700 border border-teal-200 px-3 py-1 text-xs font-bold">
-                      Reviewing
+                      {featuredPoolStatus}
                     </span>
                   </div>
                   <p className="text-2xl font-black text-[#07182b] leading-tight">
-                    Web3 Research Fellowship
+                    {featuredPool?.poolName ?? "No pools deployed yet"}
                   </p>
                   <div className="mt-6 grid grid-cols-2 gap-3">
                     <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
                       <p className="text-[11px] text-slate-500">Pool balance</p>
                       <p className="text-2xl font-black text-[#07182b] mt-1">
-                        $120K
+                        ${featuredPoolBalance}
                       </p>
                     </div>
                     <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
                       <p className="text-[11px] text-slate-500">Quorum</p>
                       <p className="text-2xl font-black text-[#07182b] mt-1">
-                        4 / 5
+                        {featuredPoolQuorum}
                       </p>
                     </div>
                   </div>
                   <div className="mt-5 h-2 rounded-full bg-slate-200 overflow-hidden">
-                    <div className="h-full w-4/5 rounded-full bg-linear-to-r from-teal-500 to-amber-400" />
+                    <div className="h-full w-[75%] rounded-full bg-linear-to-r from-teal-500 to-amber-400" />
                   </div>
                   <div className="mt-6 grid grid-cols-3 gap-2">
-                    {["Fund", "Vote", "Claim"].map((item) => (
+                    {[
+                      `Funded ${animatedPaidAmount}`,
+                      `${animatedVotes} Votes`,
+                      `${animatedPaidScholars} Paid`,
+                    ].map((item) => (
                       <div
                         key={item}
                         className="rounded-xl bg-[#07182b] px-3 py-2 text-center"
