@@ -45,7 +45,7 @@ function AppShell({
           <Route path="/" element={<LandingPage wallet={wallet} onConnect={connect} />} />
           <Route
             path="/dashbar"
-            element={<DashbarLayout wallet={wallet} shortAddress={shortAddress} onDisconnect={disconnect} />}
+            element={<DashbarLayout wallet={wallet} shortAddress={shortAddress} onConnect={connect} onDisconnect={disconnect} />}
           >
             <Route index element={<Navigate to="/dashbar/dashboard" replace />} />
             <Route path="dashboard" element={wallet.isConnected ? <DashboardPage wallet={wallet} /> : <Navigate to="/" replace />} />

@@ -1,10 +1,19 @@
+import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { ethers } from "ethers";
 import type { WalletState } from "../types";
+import { ABI } from "../data/ABI";
+import { CONTRACT_ADDRESSES } from "../data/contracts";
 import logo from "../assets/logo.png";
+
+const SEPOLIA_RPC =
+  (import.meta.env.VITE_SEPOLIA_RPC_URL as string | undefined) ??
+  "https://ethereum-sepolia-rpc.publicnode.com";
 
 interface Props {
   wallet: WalletState;
   shortAddress: string | null;
+  onConnect: () => void;
   onDisconnect: () => void;
 }
 
@@ -14,8 +23,37 @@ const DASH_LINKS = [
   { to: "/dashbar/create", label: "Create Pool", icon: "C" },
 ];
 
-export function DashbarLayout({ wallet, shortAddress, onDisconnect }: Props) {
+export function DashbarLayout({ wallet, shortAddress, onConnect, onDisconnect }: Props) {
   const navigate = useNavigate();
+  const [isTreasurySigner, setIsTreasurySigner] = useState(false);
+
+  useEffect(() => {
+    if (!wallet.address) {
+      setIsTreasurySigner(false);
+      return;
+    }
+    let cancelled = false;
+    async function check() {
+      try {
+        const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC);
+        const treasury = new ethers.Contract(
+          CONTRACT_ADDRESSES.TreasuryMultisig,
+          ABI.TreasuryMultisig,
+          provider,
+        );
+        const signers: string[] = await treasury.getSigners();
+        if (!cancelled) {
+          setIsTreasurySigner(
+            signers.some((s) => s.toLowerCase() === wallet.address!.toLowerCase()),
+          );
+        }
+      } catch {
+        if (!cancelled) setIsTreasurySigner(false);
+      }
+    }
+    void check();
+    return () => { cancelled = true; };
+  }, [wallet.address]);
 
   function handleDisconnect() {
     onDisconnect();
@@ -57,16 +95,45 @@ export function DashbarLayout({ wallet, shortAddress, onDisconnect }: Props) {
             ))}
           </nav>
 
+          {/* Treasury CTA — only visible to treasury signers */}
+          {isTreasurySigner && (
+            <div className="mt-5 rounded-2xl bg-gradient-to-br from-[#07182b] to-teal-800 p-[1px] shadow-lg shadow-cyan-950/20">
+              <button
+                disabled
+                className="flex w-full items-center gap-3 rounded-2xl bg-gradient-to-br from-[#07182b] to-teal-800 px-4 py-3.5 text-left cursor-pointer group"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-lg transition-transform group-hover:scale-110">
+                  🏛
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-black text-white leading-tight">Go to Treasury</p>
+                  <p className="text-xs text-teal-300 mt-0.5 truncate">Multisig governance</p>
+                </div>
+                <span className="ml-auto text-teal-400 text-sm shrink-0">→</span>
+              </button>
+            </div>
+          )}
+
           <div className="absolute bottom-5 left-5 right-5 rounded-2xl border border-cyan-950/10 bg-[#f7fbfb] p-4">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">Wallet</p>
-            <p className="mt-2 font-mono text-sm font-bold text-[#07182b]">{shortAddress ?? "Not connected"}</p>
-            <p className="mt-1 text-xs text-slate-500">{wallet.balance} USDT</p>
-            {wallet.isConnected && (
+            {wallet.isConnected ? (
+              <>
+                <p className="mt-2 font-mono text-sm font-bold text-[#07182b]">{shortAddress}</p>
+                <p className="mt-1 text-xs text-slate-500">{wallet.balance} USDT</p>
+                <button
+                  onClick={handleDisconnect}
+                  className="mt-4 w-full rounded-xl border border-cyan-950/10 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  Disconnect
+                </button>
+              </>
+            ) : (
               <button
-                onClick={handleDisconnect}
-                className="mt-4 w-full rounded-xl border border-cyan-950/10 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                onClick={onConnect}
+                disabled={wallet.isConnecting}
+                className="mt-3 w-full rounded-xl bg-[#07182b] px-3 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-60 cursor-pointer transition-colors"
               >
-                Disconnect
+                {wallet.isConnecting ? "Connecting…" : "Connect Wallet"}
               </button>
             )}
           </div>
@@ -88,6 +155,14 @@ export function DashbarLayout({ wallet, shortAddress, onDisconnect }: Props) {
                   {item.label}
                 </NavLink>
               ))}
+              {isTreasurySigner && (
+                <button
+                  disabled
+                  className="shrink-0 flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold bg-gradient-to-r from-[#07182b] to-teal-700 text-white cursor-pointer"
+                >
+                  🏛 <span>Treasury</span>
+                </button>
+              )}
             </div>
           </div>
 
