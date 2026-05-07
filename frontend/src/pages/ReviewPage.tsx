@@ -131,8 +131,8 @@ export function ReviewPage() {
           benefactors,
         );
 
-        const results: Proposal[] = await Promise.all(
-          benefactors.map(async (benefactor) => {
+        const results = await Promise.all(
+          benefactors.map(async (benefactor): Promise<Proposal | null> => {
             try {
               const p = await pc.getProposal(benefactor);
 
