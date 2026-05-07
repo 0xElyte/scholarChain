@@ -40,6 +40,35 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 }
 
 // Inner shell — needs useLocation which requires being inside BrowserRouter
+function PageTitle() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    const base = "ScholarChain";
+    let page = "";
+
+    if (pathname === "/") {
+      page = "";
+    } else if (pathname.startsWith("/dashbar/dashboard")) {
+      page = "Dashboard";
+    } else if (pathname.startsWith("/dashbar/explore")) {
+      page = "Explore Pools";
+    } else if (pathname.startsWith("/dashbar/create")) {
+      page = "Create Pool";
+    } else if (pathname.startsWith("/dashbar/review")) {
+      page = "Review Applications";
+    } else if (pathname.startsWith("/dashbar/pool/")) {
+      page = "Pool Detail";
+    } else if (pathname === "/treasury") {
+      page = "Treasury · Admin";
+    }
+
+    document.title = page ? `${page} · ${base}` : base;
+  }, [pathname]);
+
+  return null;
+}
+
 function AppShell() {
   const { pathname } = useLocation();
   const isStandalone = pathname === "/treasury";
@@ -48,6 +77,7 @@ function AppShell() {
     <div className="min-h-screen scholar-page flex flex-col">
       {!isStandalone && <Navbar />}
       <HashScroll />
+      <PageTitle />
       <Routes>
         <Route element={<PublicLayout />}>
           <Route path="/" element={<LandingPage />} />
