@@ -4,9 +4,8 @@ import { useWalletContext } from "../connection/WalletContext";
 import { useAllPools } from "../hooks/read-hooks/useAllPools";
 import useRunners from "../hooks/useRunners";
 import GrantPoolABI from "../constants/GrantPoolABI.json";
-import { shortAddr, formatUSDTWithCommas } from "../utils/format";
+import { shortAddr } from "../utils/format";
 import { bytes32ToCid, ipfsGatewayUrl } from "../utils/ipfs";
-import { StatusBadge } from "../components/StatusBadge";
 
 interface Proposal {
   benefactor: string;
@@ -15,6 +14,50 @@ interface Proposal {
   approvalCount: number;
   isWinner: boolean;
   hasVoted: boolean;
+  hasRejected: boolean;
+  title?: string;
+  description?: string;
+  applicantDocCID?: string;
+  loading?: boolean;
+}
+
+interface ProposalMetadata {
+  benefactorAddress?: string;
+  benefactorDocumentCID?: string;
+  fields?: Array<{
+    label: string;
+    fieldType: string;
+    required: boolean;
+    value: string;
+  }>;
+}
+
+async function fetchProposalMetadata(
+  cid: string,
+): Promise<{ title?: string; description?: string; applicantDocCID?: string }> {
+  try {
+    const url = ipfsGatewayUrl(cid);
+    if (!url) return {};
+    const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!response.ok) return {};
+    const data: ProposalMetadata = await response.json();
+
+    // Extract title (first field) and description (second field or summary)
+    const title = data.fields?.[0]?.value?.substring(0, 100) || "";
+    const description =
+      data.fields?.[1]?.value?.substring(0, 200) ||
+      data.fields?.[0]?.value?.substring(100, 300) ||
+      "";
+
+    return {
+      title: title || undefined,
+      description: description || undefined,
+      applicantDocCID: data.benefactorDocumentCID || undefined,
+    };
+  } catch (err) {
+    console.debug("Failed to fetch proposal metadata:", err);
+    return {};
+  }
 }
 
 export function ReviewPage() {
@@ -25,8 +68,10 @@ export function ReviewPage() {
   const [selectedPool, setSelectedPool] = useState<string | null>(null);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loadingProposals, setLoadingProposals] = useState(false);
-  const [txPending, setTxPending] = useState(false);
-  const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null);
+  const [pendingVotes, setPendingVotes] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(
+    null,
+  );
 
   const addr = wallet.address?.toLowerCase();
   const signerPools = pools.filter((p) =>
@@ -55,27 +100,75 @@ export function ReviewPage() {
           GrantPoolABI,
           readOnlyProvider!,
         );
+
+        // Get current block for safe querying
+        const currentBlock = await readOnlyProvider!.getBlockNumber();
+        // Use max 30k block range (Sepolia limit is 50k)
+        const fromBlock = Math.max(0, currentBlock - 30000);
+
+        console.log(
+          `Querying events from block ${fromBlock} to ${currentBlock} for pool ${selectedPool}`,
+        );
+
         const events = await pc.queryFilter(
           pc.filters.ProposalSubmitted(),
-          0,
+          fromBlock,
+          currentBlock,
         );
+
+        console.log(`Found ${events.length} ProposalSubmitted events`);
+
         const benefactors = [
-          ...new Set(events.map((e: any) => e.args?.benefactor as string)),
+          ...new Set(
+            events
+              .map((e: any) => e.args?.benefactor as string)
+              .filter(Boolean),
+          ),
         ].filter(Boolean);
+
+        console.log(
+          `Extracted ${benefactors.length} unique benefactors`,
+          benefactors,
+        );
 
         const results: Proposal[] = await Promise.all(
           benefactors.map(async (benefactor) => {
             try {
               const p = await pc.getProposal(benefactor);
-              const hasVoted =
-                wallet.address
-                  ? await pc.hasVoted(wallet.address, benefactor).catch(() => false)
-                  : false;
+
+              // Check if proposal exists
+              if (!p.exists) {
+                console.warn(
+                  `Proposal for ${benefactor} has exists=false, skipping`,
+                );
+                return null;
+              }
+
+              const hasVoted = wallet.address
+                ? await pc
+                    .hasVoted(wallet.address, benefactor)
+                    .catch(() => false)
+                : false;
               const rawCid =
                 typeof p.documentCID === "string" ? p.documentCID : "";
               const cid = rawCid.startsWith("0x")
                 ? bytes32ToCid(rawCid)
                 : rawCid;
+
+              // Fetch proposal metadata from IPFS
+              const { title, description, applicantDocCID } =
+                await fetchProposalMetadata(cid);
+
+              // Check if voted NO (rejected)
+              const rejections = await pc.queryFilter(
+                pc.filters.VoteCast(wallet.address || undefined, benefactor),
+                fromBlock,
+                currentBlock,
+              );
+              const hasRejected = rejections.some(
+                (e: any) => e.args?.approved === false,
+              );
+
               return {
                 benefactor,
                 documentCID: cid,
@@ -83,23 +176,27 @@ export function ReviewPage() {
                 approvalCount: Number(p.approvalCount ?? 0),
                 isWinner: Boolean(p.isWinner),
                 hasVoted: Boolean(hasVoted),
+                hasRejected: Boolean(hasRejected),
+                title,
+                description,
+                applicantDocCID,
               };
-            } catch {
-              return {
-                benefactor,
-                documentCID: "",
-                payoutAddress: "",
-                approvalCount: 0,
-                isWinner: false,
-                hasVoted: false,
-              };
+            } catch (err) {
+              console.error(`Error processing benefactor ${benefactor}:`, err);
+              return null;
             }
           }),
         );
 
-        if (!cancelled) setProposals(results);
+        // Filter out nulls
+        const validResults = results.filter((r): r is Proposal => r !== null);
+
+        console.log(`Filtered to ${validResults.length} valid proposals`);
+
+        if (!cancelled) setProposals(validResults);
       } catch (err) {
         console.error("Failed to load proposals:", err);
+        if (!cancelled) setProposals([]);
       } finally {
         if (!cancelled) setLoadingProposals(false);
       }
@@ -111,30 +208,43 @@ export function ReviewPage() {
     };
   }, [selectedPool, readOnlyProvider, wallet.address]);
 
-  async function handleVote(benefactor: string) {
+  async function handleVote(benefactor: string, approve: boolean) {
     if (!signer || !selectedPool) return;
     try {
-      setTxPending(true);
+      setPendingVotes((prev) => new Set([...prev, benefactor]));
       const pc = new Contract(getAddress(selectedPool), GrantPoolABI, signer);
-      const tx = await pc.vote(getAddress(benefactor));
+      const tx = await pc.vote(getAddress(benefactor), approve);
       await tx.wait();
+
       setProposals((prev) =>
         prev.map((p) =>
           p.benefactor.toLowerCase() === benefactor.toLowerCase()
-            ? { ...p, hasVoted: true, approvalCount: p.approvalCount + 1 }
+            ? {
+                ...p,
+                hasVoted: approve ? true : p.hasVoted,
+                hasRejected: !approve ? true : p.hasRejected,
+                approvalCount: approve ? p.approvalCount + 1 : p.approvalCount,
+              }
             : p,
         ),
       );
-      showToast("Vote cast successfully");
+      showToast(approve ? "Vote cast successfully" : "Rejection recorded");
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Transaction failed", false);
+      showToast(
+        err instanceof Error ? err.message : "Transaction failed",
+        false,
+      );
     } finally {
-      setTxPending(false);
+      setPendingVotes((prev) => {
+        const next = new Set(prev);
+        next.delete(benefactor);
+        return next;
+      });
     }
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-white">
       {/* Toast */}
       {toast && (
         <div
@@ -148,132 +258,123 @@ export function ReviewPage() {
         </div>
       )}
 
-      {/* Page header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Review Proposals</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Vote on applicants for pools where you are a designated reviewer.
-        </p>
-      </div>
-
-      <div className="grid lg:grid-cols-[300px_1fr] gap-6 items-start">
-        {/* ── Pool list ── */}
-        <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">
-            Assigned Pools
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Page header */}
+        <div className="mb-8">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">
+            Signer Workspace
           </p>
-          {poolsLoading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="h-16 rounded-xl bg-slate-100 animate-pulse"
-                />
-              ))}
-            </div>
-          ) : signerPools.length === 0 ? (
-            <div className="rounded-xl bg-slate-50 border border-slate-200 p-5 text-center">
-              <p className="text-2xl mb-2">🔍</p>
-              <p className="text-sm font-semibold text-slate-700 mb-1">
-                No pools assigned
-              </p>
-              <p className="text-xs text-slate-500">
-                You are not a designated reviewer on any pool.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {signerPools.map((pool) => (
-                <button
-                  key={pool.address}
-                  onClick={() => setSelectedPool(pool.address)}
-                  className={`w-full text-left rounded-xl p-4 border transition-all cursor-pointer ${
-                    selectedPool === pool.address
-                      ? "bg-[#07182b] text-white border-[#07182b] shadow-lg"
-                      : "bg-white text-slate-700 border-slate-200 hover:border-teal-400 hover:bg-teal-50/60"
-                  }`}
-                >
-                  <p className="text-sm font-semibold truncate">
-                    {pool.poolName}
-                  </p>
-                  <div
-                    className={`flex items-center gap-2 mt-1 text-xs ${
-                      selectedPool === pool.address
-                        ? "text-teal-200"
-                        : "text-slate-500"
-                    }`}
-                  >
-                    <span>{pool.state}</span>
-                    <span>·</span>
-                    <span>{pool.proposalCount} proposals</span>
-                  </div>
-                </button>
-              ))}
-            </div>
+          {selectedPoolData && (
+            <h1 className="text-3xl font-bold text-slate-900 mb-2">
+              Reviewing: {selectedPoolData.poolName}
+            </h1>
           )}
+          <p className="text-sm text-slate-600">
+            {selectedPoolData
+              ? "Evaluate applications for your pool. Ensure proposals meet the technical standards defined in the criteria."
+              : "Select a pool to review applications"}
+          </p>
         </div>
 
-        {/* ── Proposal list ── */}
-        <div>
-          {!selectedPool ? (
-            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-16 text-center">
-              <p className="text-4xl mb-3">👈</p>
-              <p className="text-sm font-semibold text-slate-700">
-                Select a pool to view and review proposals
-              </p>
-            </div>
-          ) : loadingProposals ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="h-28 rounded-2xl bg-slate-100 animate-pulse"
-                />
-              ))}
-            </div>
-          ) : proposals.length === 0 ? (
-            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-16 text-center">
-              <p className="text-4xl mb-3">📭</p>
-              <p className="text-sm font-semibold text-slate-700">
-                No proposals submitted yet
-              </p>
-              <p className="text-xs text-slate-500 mt-1">
-                Applicants submit during the active phase.
-              </p>
-            </div>
-          ) : (
-            <div>
-              {/* Pool summary strip */}
-              {selectedPoolData && (
-                <div className="flex flex-wrap items-center gap-3 mb-4 p-4 rounded-xl bg-white border border-cyan-950/10 shadow-sm">
-                  <StatusBadge state={selectedPoolData.state} size="sm" />
-                  <span className="text-sm font-semibold text-slate-800">
-                    {selectedPoolData.poolName}
-                  </span>
-                  <span className="text-xs text-slate-400">
-                    {formatUSDTWithCommas(selectedPoolData.totalDeposited)} USDT
-                    pooled
-                  </span>
-                  <span className="text-xs text-slate-400 ml-auto">
-                    {proposals.length} proposal
-                    {proposals.length !== 1 ? "s" : ""}
-                  </span>
-                </div>
-              )}
+        <div className="grid lg:grid-cols-[280px_1fr] gap-6 items-start">
+          {/* ── Pool selector sidebar ── */}
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
+              Assigned Pools
+            </p>
+            {poolsLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="h-16 rounded-xl bg-slate-100 animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : signerPools.length === 0 ? (
+              <div className="rounded-xl bg-slate-50 border border-slate-200 p-5 text-center">
+                <p className="text-2xl mb-2">🔍</p>
+                <p className="text-sm font-semibold text-slate-700 mb-1">
+                  No pools assigned
+                </p>
+                <p className="text-xs text-slate-500">
+                  You are not a designated reviewer.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {signerPools.map((pool) => (
+                  <button
+                    key={pool.address}
+                    onClick={() => setSelectedPool(pool.address)}
+                    className={`w-full text-left rounded-xl p-4 border transition-all cursor-pointer ${
+                      selectedPool === pool.address
+                        ? "bg-[#07182b] text-white border-[#07182b] shadow-lg"
+                        : "bg-white text-slate-700 border-slate-200 hover:border-teal-400 hover:bg-teal-50/60"
+                    }`}
+                  >
+                    <p className="text-sm font-semibold truncate">
+                      {pool.poolName}
+                    </p>
+                    <div
+                      className={`flex items-center gap-2 mt-1 text-xs ${
+                        selectedPool === pool.address
+                          ? "text-teal-200"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      <span className="capitalize">{pool.state}</span>
+                      <span>·</span>
+                      <span>{pool.proposalCount} pending</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-              <div className="space-y-3">
+          {/* ── Proposals grid ── */}
+          <div>
+            {!selectedPool ? (
+              <div className="rounded-2xl bg-slate-50 border border-slate-200 p-16 text-center">
+                <p className="text-4xl mb-3">👈</p>
+                <p className="text-sm font-semibold text-slate-700">
+                  Select a pool to view and review proposals
+                </p>
+              </div>
+            ) : loadingProposals ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className="h-64 rounded-2xl bg-slate-100 animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : proposals.length === 0 ? (
+              <div className="rounded-2xl bg-slate-50 border border-slate-200 p-16 text-center">
+                <p className="text-4xl mb-3">📭</p>
+                <p className="text-sm font-semibold text-slate-700">
+                  No proposals submitted yet
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Applicants submit during the active phase.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
                 {proposals.map((proposal) => (
                   <ProposalCard
                     key={proposal.benefactor}
                     proposal={proposal}
                     onVote={handleVote}
-                    txPending={txPending}
+                    isPending={pendingVotes.has(proposal.benefactor)}
                     poolState={selectedPoolData?.state ?? ""}
                   />
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -283,94 +384,127 @@ export function ReviewPage() {
 function ProposalCard({
   proposal,
   onVote,
-  txPending,
+  isPending,
   poolState,
 }: {
   proposal: Proposal;
-  onVote: (b: string) => void;
-  txPending: boolean;
+  onVote: (benefactor: string, approve: boolean) => void;
+  isPending: boolean;
   poolState: string;
 }) {
-  const gatewayUrl = proposal.documentCID
-    ? ipfsGatewayUrl(proposal.documentCID)
+  const gatewayUrl = proposal.applicantDocCID
+    ? ipfsGatewayUrl(proposal.applicantDocCID)
     : null;
 
   const canVote =
-    poolState === "REVIEW" && !proposal.hasVoted && !proposal.isWinner;
+    poolState === "REVIEW" &&
+    !proposal.hasVoted &&
+    !proposal.hasRejected &&
+    !proposal.isWinner;
+
+  // Determine status badge
+  let statusLabel = "Pending";
+  let statusColor = "slate";
+  if (proposal.isWinner) {
+    statusLabel = "Approved";
+    statusColor = "emerald";
+  } else if (proposal.hasVoted && !proposal.hasRejected) {
+    statusLabel = "Approved";
+    statusColor = "emerald";
+  } else if (proposal.hasRejected) {
+    statusLabel = "Rejected";
+    statusColor = "red";
+  }
+
+  const statusBgColor = {
+    emerald: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+    red: "bg-red-50 text-red-700 border border-red-200",
+    slate: "bg-slate-100 text-slate-700 border border-slate-200",
+  }[statusColor];
 
   return (
-    <div
-      className={`rounded-2xl p-5 border transition-all ${
-        proposal.isWinner
-          ? "bg-emerald-50 border-emerald-200 shadow-sm"
-          : "bg-white border-cyan-950/10 shadow-sm"
-      }`}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        {/* Applicant info */}
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            {proposal.isWinner && (
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
-                🏆 Winner
-              </span>
-            )}
-            {proposal.hasVoted && !proposal.isWinner && (
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
-                ✓ Voted
-              </span>
-            )}
-          </div>
-          <p className="text-sm font-semibold text-slate-800 font-mono">
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
+      {/* Header: Address + Status Badge */}
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">
+            Applicant Wallet
+          </p>
+          <p className="text-sm font-mono font-bold text-teal-600">
             {shortAddr(proposal.benefactor)}
           </p>
-          <p className="text-xs text-slate-500 mt-0.5 font-mono">
-            Payout: {shortAddr(proposal.payoutAddress) || "—"}
-          </p>
         </div>
-
-        {/* Vote count + actions */}
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="text-center">
-            <p className="text-lg font-black text-slate-800 leading-none">
-              {proposal.approvalCount}
-            </p>
-            <p className="text-[10px] text-slate-400 mt-0.5">votes</p>
-          </div>
-
-          {gatewayUrl && (
-            <a
-              href={gatewayUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors no-underline"
-            >
-              View Doc ↗
-            </a>
-          )}
-
-          {canVote ? (
-            <button
-              onClick={() => onVote(proposal.benefactor)}
-              disabled={txPending}
-              className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 transition-colors cursor-pointer"
-            >
-              {txPending ? "Voting…" : "Approve"}
-            </button>
-          ) : poolState === "REVIEW" && proposal.hasVoted ? (
-            <span className="px-4 py-1.5 text-xs font-medium rounded-lg bg-slate-100 text-slate-500 border border-slate-200">
-              Voted
-            </span>
-          ) : null}
+        <div
+          className={`px-3 py-1 rounded-lg text-xs font-semibold ${statusBgColor}`}
+        >
+          {statusLabel}
         </div>
       </div>
 
-      {/* CID */}
-      {proposal.documentCID && (
-        <p className="mt-3 text-[11px] text-slate-400 font-mono break-all border-t border-slate-100 pt-2">
-          CID: {proposal.documentCID}
+      {/* Title */}
+      {proposal.title && (
+        <h3 className="text-base font-bold text-slate-900 mb-2 line-clamp-2">
+          {proposal.title}
+        </h3>
+      )}
+
+      {/* Description */}
+      {proposal.description && (
+        <p className="text-sm text-slate-600 mb-4 line-clamp-3">
+          {proposal.description}
         </p>
       )}
+
+      {/* Approval count */}
+      <div className="mb-4 pb-4 border-t border-slate-100 pt-3">
+        <p className="text-xs text-slate-500">
+          Approval votes:{" "}
+          <span className="font-bold text-slate-700">
+            {proposal.approvalCount}
+          </span>
+        </p>
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex gap-3">
+        {gatewayUrl && (
+          <a
+            href={gatewayUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors no-underline text-center"
+          >
+            📄 View Doc
+          </a>
+        )}
+
+        {canVote ? (
+          <>
+            <button
+              onClick={() => onVote(proposal.benefactor, true)}
+              disabled={isPending}
+              className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isPending ? "…" : "Approve"}
+            </button>
+            <button
+              onClick={() => onVote(proposal.benefactor, false)}
+              disabled={isPending}
+              className="px-3 py-2 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isPending ? "…" : "✕"}
+            </button>
+          </>
+        ) : proposal.hasVoted ? (
+          <div className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-center">
+            ✓ Voted
+          </div>
+        ) : proposal.hasRejected ? (
+          <div className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-red-50 text-red-700 border border-red-200 text-center">
+            Rejected
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
