@@ -1,31 +1,30 @@
 import { useEffect, useState } from "react";
+import { Contract, JsonRpcProvider } from "ethers";
 import { useFactoryContract } from "../useContracts";
-import useRunners from "../useRunners";
 import GrantPoolABI from "../../constants/GrantPoolABI.json";
+
+// Use publicnode for unrestricted eth_getLogs (Alchemy free tier caps at 10 blocks)
+const LOG_RPC = "https://ethereum-sepolia-rpc.publicnode.com";
 
 export const useTotalVotes = () => {
   const [totalVotes, setTotalVotes] = useState<string>("0");
   const factoryContract = useFactoryContract();
-  const { readOnlyProvider } = useRunners();
 
   useEffect(() => {
     const fetchVotes = async () => {
       try {
-        if (!factoryContract || !readOnlyProvider) {
+        if (!factoryContract) {
           setTotalVotes("0");
           return;
         }
 
+        const logProvider = new JsonRpcProvider(LOG_RPC);
         const poolAddresses: string[] = await factoryContract.getAllPools();
         let total = 0n;
 
         for (const poolAddress of poolAddresses) {
           try {
-            const pc = new (await import("ethers")).Contract(
-              poolAddress,
-              GrantPoolABI,
-              readOnlyProvider,
-            );
+            const pc = new Contract(poolAddress, GrantPoolABI, logProvider);
             // gather proposal benefactors from events
             const events = await pc.queryFilter(
               pc.filters.ProposalSubmitted(),
@@ -39,7 +38,7 @@ export const useTotalVotes = () => {
               try {
                 const count = await pc.approvalCount(b);
                 total += BigInt(count.toString());
-              } catch (e) {
+              } catch {
                 // ignore per-proposal failures
               }
             }
@@ -56,7 +55,7 @@ export const useTotalVotes = () => {
     };
 
     fetchVotes();
-  }, [factoryContract, readOnlyProvider]);
+  }, [factoryContract]);
 
   return totalVotes;
 };
