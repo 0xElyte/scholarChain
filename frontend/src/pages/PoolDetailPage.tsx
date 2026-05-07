@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Contract, getAddress, isAddress, parseUnits } from "ethers";
+import { Contract, Interface, getAddress, isAddress, parseUnits } from "ethers";
 import type { UserRole } from "../types";
 import { Modal } from "../components/Modal";
 import {
@@ -19,12 +19,15 @@ import { ipfsGatewayUrl } from "../utils/ipfs";
 import { cidToBytes32 } from "../utils/ipfs";
 import { uploadFileToPinata } from "../utils/pinata";
 import GrantPoolABI from "../constants/GrantPoolABI.json";
+import { customReasonMapper } from "../utils/errorHandler";
 
 type FieldInputValue = {
   text: string;
   cid: string;
   fileName: string;
 };
+
+const grantPoolInterface = new Interface(GrantPoolABI);
 
 export function PoolDetailPage() {
   const { wallet } = useWalletContext();
@@ -61,7 +64,11 @@ export function PoolDetailPage() {
 
   useEffect(() => {
     if (!isWinner || !pool || !readOnlyProvider || !wallet.address) return;
-    const pc = new Contract(getAddress(pool.poolAddress), GrantPoolABI, readOnlyProvider);
+    const pc = new Contract(
+      getAddress(pool.poolAddress),
+      GrantPoolABI,
+      readOnlyProvider,
+    );
     pc.hasClaimed(wallet.address)
       .then((claimed: boolean) => setHasClaimed(claimed))
       .catch(() => {});
@@ -128,7 +135,9 @@ export function PoolDetailPage() {
   })();
   const canRefund =
     pool.isCancelled ||
-    (pool.state === "DISTRIBUTING" && pool.winners.length === 0 && pool.distributionEntered);
+    (pool.state === "DISTRIBUTING" &&
+      pool.winners.length === 0 &&
+      pool.distributionEntered);
   const canCancel = isCreator && pool.state === "PENDING";
   const criteriaGatewayUrl = ipfsGatewayUrl(pool.criteriaMetadataCID);
 
@@ -245,7 +254,10 @@ export function PoolDetailPage() {
         `proposal-${Date.now()}.json`,
         { type: "application/json" },
       );
-      const payloadCid = await uploadFileToPinata(payloadFile, payloadFile.name);
+      const payloadCid = await uploadFileToPinata(
+        payloadFile,
+        payloadFile.name,
+      );
       const proposalContract = new Contract(
         getAddress(pool!.poolAddress),
         GrantPoolABI,
@@ -266,9 +278,27 @@ export function PoolDetailPage() {
       setToast("Proposal submitted successfully");
       setTimeout(() => setToast(null), 3500);
     } catch (err) {
-      setSubmitError(
-        err instanceof Error ? err.message : "Failed to submit proposal",
-      );
+      // Try to extract revert payload and decode with the contract ABI, then map to friendly message
+      const candidateData = [
+        (err as { data?: unknown }).data,
+        (err as { info?: { error?: { data?: unknown } } }).info?.error?.data,
+        (err as { error?: { data?: unknown } }).error?.data,
+      ].find((value): value is string => typeof value === "string");
+
+      if (candidateData) {
+        try {
+          const decoded = grantPoolInterface.parseError(candidateData);
+          setSubmitError(customReasonMapper(decoded as any));
+        } catch {
+          setSubmitError(
+            err instanceof Error ? err.message : "Failed to submit proposal.",
+          );
+        }
+      } else {
+        setSubmitError(
+          err instanceof Error ? err.message : "Failed to submit proposal.",
+        );
+      }
     } finally {
       setTxPending(false);
     }
@@ -278,7 +308,11 @@ export function PoolDetailPage() {
     if (!signer) return;
     try {
       setTxPending(true);
-      const pc = new Contract(getAddress(pool!.poolAddress), GrantPoolABI, signer);
+      const pc = new Contract(
+        getAddress(pool!.poolAddress),
+        GrantPoolABI,
+        signer,
+      );
       const tx = await pc.enterDistributionPhase();
       await tx.wait();
       setDistributionModal(false);
@@ -296,7 +330,11 @@ export function PoolDetailPage() {
     if (!signer) return;
     try {
       setTxPending(true);
-      const pc = new Contract(getAddress(pool!.poolAddress), GrantPoolABI, signer);
+      const pc = new Contract(
+        getAddress(pool!.poolAddress),
+        GrantPoolABI,
+        signer,
+      );
       const tx = await pc.claimGrant();
       await tx.wait();
       setHasClaimed(true);
@@ -959,7 +997,9 @@ export function PoolDetailPage() {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-slate-500">Pool</span>
-              <span className="font-semibold text-slate-800">{pool.poolName}</span>
+              <span className="font-semibold text-slate-800">
+                {pool.poolName}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Total deposited</span>
@@ -969,7 +1009,9 @@ export function PoolDetailPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Winners</span>
-              <span className="font-semibold text-slate-800">{pool.winners.length}</span>
+              <span className="font-semibold text-slate-800">
+                {pool.winners.length}
+              </span>
             </div>
           </div>
         </div>
