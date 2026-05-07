@@ -1,6 +1,12 @@
 import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { useWallet } from "./hooks/useWallet";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+  useLocation,
+} from "react-router-dom";
 import { Navbar } from "./components/Navbar";
 import { Footer } from "./components/Footer";
 import { DashbarLayout } from "./components/DashbarLayout";
@@ -9,68 +15,89 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { ExplorerPage } from "./pages/ExplorerPage";
 import { CreatePoolPage } from "./pages/CreatePoolPage";
 import { PoolDetailPage } from "./pages/PoolDetailPage";
+import { ReviewPage } from "./pages/ReviewPage";
+import AppkitWrapper from "./connection/AppkitWrapper";
+import { WalletProvider, useWalletContext } from "./connection/WalletContext";
 
-function App() {
-  const { wallet, connect, disconnect, shortAddress } = useWallet();
-
+function PublicLayout() {
   return (
-    <BrowserRouter>
-      <AppShell wallet={wallet} connect={connect} disconnect={disconnect} shortAddress={shortAddress} />
-    </BrowserRouter>
-  );
-}
-
-export default App;
-
-function AppShell({
-  wallet,
-  connect,
-  disconnect,
-  shortAddress,
-}: {
-  wallet: ReturnType<typeof useWallet>["wallet"];
-  connect: ReturnType<typeof useWallet>["connect"];
-  disconnect: ReturnType<typeof useWallet>["disconnect"];
-  shortAddress: string | null;
-}) {
-  const location = useLocation();
-  const isDashbar = location.pathname.startsWith("/dashbar");
-
-  return (
-    <div className="min-h-screen scholar-page flex flex-col">
-      {!isDashbar && <Navbar wallet={wallet} shortAddress={shortAddress} onConnect={connect} />}
-      <HashScroll />
-      <main className={`flex-1 ${isDashbar ? "" : "pt-16"}`}>
-        <Routes>
-          <Route path="/" element={<LandingPage wallet={wallet} onConnect={connect} />} />
-          <Route
-            path="/dashbar"
-            element={<DashbarLayout wallet={wallet} shortAddress={shortAddress} onConnect={connect} onDisconnect={disconnect} />}
-          >
-            <Route index element={<Navigate to="/dashbar/dashboard" replace />} />
-            <Route path="dashboard" element={wallet.isConnected ? <DashboardPage wallet={wallet} /> : <Navigate to="/" replace />} />
-            <Route path="explore" element={<ExplorerPage wallet={wallet} />} />
-            <Route path="create" element={<CreatePoolPage wallet={wallet} />} />
-            <Route path="pool/:address" element={<PoolDetailPage wallet={wallet} />} />
-          </Route>
-          <Route path="/dashboard" element={<Navigate to="/dashbar/dashboard" replace />} />
-          <Route path="/explore" element={<Navigate to="/dashbar/explore" replace />} />
-          <Route path="/create" element={<Navigate to="/dashbar/create" replace />} />
-          <Route path="/pool/:address" element={<Navigate to="/dashbar/explore" replace />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+    <div className="flex flex-col min-h-screen">
+      <main className="flex-1">
+        <Outlet />
       </main>
-      {!isDashbar && <Footer />}
+      <Footer />
     </div>
   );
 }
+
+function ProtectedDashbarRoutes() {
+  const { wallet } = useWalletContext();
+
+  if (!wallet.isConnected) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <DashbarLayout />;
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppkitWrapper>
+        <WalletProvider>
+          <div className="min-h-screen scholar-page flex flex-col">
+            <Navbar />
+            <HashScroll />
+            <Routes>
+              <Route element={<PublicLayout />}>
+                <Route path="/" element={<LandingPage />} />
+              </Route>
+              <Route path="/dashbar" element={<ProtectedDashbarRoutes />}>
+                <Route
+                  index
+                  element={<Navigate to="/dashbar/dashboard" replace />}
+                />
+                <Route path="dashboard" element={<DashboardPage />} />
+                <Route path="explore" element={<ExplorerPage />} />
+                <Route path="create" element={<CreatePoolPage />} />
+                <Route path="review" element={<ReviewPage />} />
+                <Route path="pool/:address" element={<PoolDetailPage />} />
+              </Route>
+              <Route
+                path="/dashboard"
+                element={<Navigate to="/dashbar/dashboard" replace />}
+              />
+              <Route
+                path="/explore"
+                element={<Navigate to="/dashbar/explore" replace />}
+              />
+              <Route
+                path="/create"
+                element={<Navigate to="/dashbar/create" replace />}
+              />
+              <Route
+                path="/pool/:address"
+                element={<Navigate to="/dashbar/explore" replace />}
+              />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </div>
+        </WalletProvider>
+      </AppkitWrapper>
+    </BrowserRouter>
+  );
+}
+export default App;
 
 function HashScroll() {
   const { hash, pathname } = useLocation();
 
   useEffect(() => {
     if (!hash) {
-      window.scrollTo({ top: 0, behavior: pathname === "/" ? "auto" : "smooth" });
+      window.scrollTo({
+        top: 0,
+        behavior: pathname === "/" ? "auto" : "smooth",
+      });
       return;
     }
 
