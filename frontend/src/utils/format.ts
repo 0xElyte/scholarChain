@@ -1,9 +1,26 @@
 export function formatUSDT(raw: string): string {
   const n = parseFloat(raw);
   if (isNaN(n)) return "0";
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  if (n >= 1_000_000) {
+    const m = (n / 1_000_000).toFixed(1);
+    return m.endsWith(".0") ? m.slice(0, -2) + "M" : m + "M";
+  }
+  if (n >= 1_000) {
+    const k = (n / 1_000).toFixed(1);
+    return k.endsWith(".0") ? k.slice(0, -2) + "K" : k + "K";
+  }
   return n.toLocaleString();
+}
+
+export function formatUSDTWithCommas(raw: string): string {
+  const n = Number(raw);
+  if (Number.isNaN(n)) return "0";
+
+  const usdtAmount = n / 1_000_000;
+  return usdtAmount.toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
 
 export function formatDate(ms: number): string {
