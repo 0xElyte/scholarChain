@@ -1,6 +1,7 @@
 import { useAppKitProvider, useAppKitAccount } from "@reown/appkit/react";
-import { BrowserProvider, JsonRpcSigner } from "ethers";
+import { BrowserProvider } from "ethers";
 import type { Eip1193Provider } from "ethers";
+import type { JsonRpcSigner } from "ethers";
 import { useEffect, useMemo, useState } from "react";
 import { jsonRpcProvider } from "../constants/provider";
 
