@@ -89,7 +89,7 @@ function AppShell() {
           />
           <Route path="dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
           <Route path="explore" element={<ExplorerPage />} />
-          <Route path="create" element={<ProtectedRoute><CreatePoolPage /></ProtectedRoute>} />
+          <Route path="create" element={<CreatePoolPage />} />
           <Route path="review" element={<ProtectedRoute><ReviewPage /></ProtectedRoute>} />
           <Route path="pool/:address" element={<PoolDetailPage />} />
         </Route>

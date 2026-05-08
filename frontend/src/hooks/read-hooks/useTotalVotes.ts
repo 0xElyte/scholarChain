@@ -11,6 +11,27 @@ export const useTotalVotes = () => {
   const factoryContract = useFactoryContract();
 
   useEffect(() => {
+    const fetchProposalEvents = async (
+      pc: Contract,
+      logProvider: JsonRpcProvider,
+    ) => {
+      const latest = await logProvider.getBlockNumber();
+      const chunkSize = 49_000;
+      const events: any[] = [];
+
+      for (let fromBlock = 0; fromBlock <= latest; fromBlock += chunkSize) {
+        const toBlock = Math.min(fromBlock + chunkSize - 1, latest);
+        const batch = await pc.queryFilter(
+          pc.filters.ProposalSubmitted(),
+          fromBlock,
+          toBlock,
+        );
+        events.push(...batch);
+      }
+
+      return events;
+    };
+
     const fetchVotes = async () => {
       try {
         if (!factoryContract) {
@@ -25,11 +46,7 @@ export const useTotalVotes = () => {
         for (const poolAddress of poolAddresses) {
           try {
             const pc = new Contract(poolAddress, GrantPoolABI, logProvider);
-            // gather proposal benefactors from events
-            const events = await pc.queryFilter(
-              pc.filters.ProposalSubmitted(),
-              0,
-            );
+            const events = await fetchProposalEvents(pc, logProvider);
             const benefactors = [
               ...new Set(events.map((e: any) => e.args?.benefactor)),
             ];
