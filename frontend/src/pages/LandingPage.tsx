@@ -118,7 +118,12 @@ export function LandingPage() {
 
   const handleCreateClick = async () => {
     if (!wallet.isConnected) {
-      await connect();
+      try {
+        await connect();
+        navigate("/dashbar/create");
+      } catch {
+        navigate("/dashbar/create");
+      }
       return;
     }
 
@@ -126,11 +131,6 @@ export function LandingPage() {
   };
 
   const handleExploreClick = async () => {
-    if (!wallet.isConnected) {
-      await connect();
-      return;
-    }
-
     navigate("/dashbar/explore");
   };
 
