@@ -20,6 +20,7 @@ import { cidToBytes32 } from "../utils/ipfs";
 import { uploadFileToPinata } from "../utils/pinata";
 import GrantPoolABI from "../constants/GrantPoolABI.json";
 import { customReasonMapper } from "../utils/errorHandler";
+import { PoolLifecycleStepper } from "../components/PoolLifecycleStepper";
 
 type FieldInputValue = {
   text: string;
@@ -394,6 +395,9 @@ export function PoolDetailPage() {
           <span className="font-mono">{shortAddr(pool.creator)}</span>
         </p>
       </div>
+
+      {/* Lifecycle stepper */}
+      <PoolLifecycleStepper state={pool.state} />
 
       {/* Action bar */}
       <div className="flex flex-wrap gap-2 mb-8">
