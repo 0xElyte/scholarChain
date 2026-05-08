@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Contract, JsonRpcProvider, formatUnits, parseUnits, isAddress } from "ethers";
+import { Contract, JsonRpcProvider, formatUnits, parseUnits, isAddress, AbiCoder } from "ethers";
 import { useWalletContext } from "../connection/WalletContext";
 import useRunners from "../hooks/useRunners";
 import TreasuryMultisigABI from "../constants/TreasuryMultisigABI.json";
@@ -35,12 +35,39 @@ function decodeProposalLabel(p: ProposalView): string {
   if (!d || d === "0x") return "Arbitrary call";
   const sel = d.slice(0, 10).toLowerCase();
   const labels: Record<string, string> = {
-    "0x43d726d6": "ERC-20 Withdrawal",   // proposeERC20Withdrawal selector
-    "0x7065cb48": "Add Signer",
-    "0x173825d9": "Remove Signer",
-    "0xba51a6df": "Change Threshold",
+    "0xa9059cbb": "ERC-20 Withdrawal",   // IERC20.transfer(address,uint256)
+    "0x430eb976": "Add Signer",           // externalAddSigner(address)
+    "0x23e730f0": "Remove Signer",        // externalRemoveSigner(address)
+    "0xcfb69b9f": "Change Threshold",     // externalChangeRequiredSignatures(uint256)
   };
   return labels[sel] ?? "Custom Call";
+}
+
+// Returns a human-readable detail row for a proposal's calldata
+function decodeProposalDetail(p: ProposalView): { label: string; value: string } | null {
+  const d = p.data;
+  if (!d || d === "0x" || d.length < 10) return null;
+  const sel = d.slice(0, 10).toLowerCase();
+  const params = "0x" + d.slice(10);
+  const coder = AbiCoder.defaultAbiCoder();
+  try {
+    if (sel === "0x430eb976" || sel === "0x23e730f0") {
+      // externalAddSigner / externalRemoveSigner(address)
+      const [addr] = coder.decode(["address"], params);
+      return { label: sel === "0x430eb976" ? "New signer" : "Signer to remove", value: addr as string };
+    }
+    if (sel === "0xa9059cbb") {
+      // IERC20.transfer(address recipient, uint256 amount)
+      const [recipient, amount] = coder.decode(["address", "uint256"], params);
+      return { label: "Recipient / Amount", value: `${shortAddr(recipient as string)} · ${formatUnits(amount as bigint, 6)} USDT` };
+    }
+    if (sel === "0xcfb69b9f") {
+      // externalChangeRequiredSignatures(uint256)
+      const [threshold] = coder.decode(["uint256"], params);
+      return { label: "New threshold", value: (threshold as bigint).toString() };
+    }
+  } catch { /* ignore decode errors */ }
+  return null;
 }
 
 function statusBadge(p: ProposalView, required: number) {
@@ -263,6 +290,14 @@ export function TreasuryPage() {
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [copiedAddr, setCopiedAddr] = useState<string | null>(null);
+
+  function copyToClipboard(addr: string) {
+    navigator.clipboard.writeText(addr).then(() => {
+      setCopiedAddr(addr);
+      setTimeout(() => setCopiedAddr(null), 1500);
+    });
+  }
   const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null);
 
   function showToast(text: string, ok = true) {
@@ -518,16 +553,25 @@ export function TreasuryPage() {
                 <div className="space-y-2">
                   {stats?.signers.map((s) => {
                     const isMe = s.toLowerCase() === wallet.address?.toLowerCase();
+                    const copied = copiedAddr === s;
                     return (
-                      <div key={s} className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 border ${
-                        isMe
-                          ? "border-teal-600/40 bg-teal-900/30"
-                          : "border-white/5 bg-white/5"
-                      }`}>
+                      <button
+                        key={s}
+                        onClick={() => copyToClipboard(s)}
+                        title={copied ? "Copied!" : `Click to copy: ${s}`}
+                        className={`w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 border text-left transition-colors cursor-pointer ${
+                          isMe
+                            ? "border-teal-600/40 bg-teal-900/30 hover:bg-teal-900/50"
+                            : "border-white/5 bg-white/5 hover:bg-white/10"
+                        }`}
+                      >
                         <span className={`h-2 w-2 shrink-0 rounded-full ${isMe ? "bg-teal-400" : "bg-slate-600"}`} />
                         <span className="font-mono text-xs text-slate-300 truncate">{shortAddr(s)}</span>
-                        {isMe && <span className="ml-auto text-[9px] font-black uppercase tracking-widest text-teal-500">You</span>}
-                      </div>
+                        <span className="ml-auto text-[10px] text-slate-500 shrink-0">
+                          {copied ? "✓ copied" : "⎘"}
+                        </span>
+                        {isMe && <span className="text-[9px] font-black uppercase tracking-widest text-teal-500">You</span>}
+                      </button>
                     );
                   })}
                 </div>
@@ -625,6 +669,16 @@ export function TreasuryPage() {
                               <> · target <span className="font-mono text-slate-400">{shortAddr(p.to)}</span></>
                             )}
                           </p>
+                          {(() => {
+                            const detail = decodeProposalDetail(p);
+                            if (!detail) return null;
+                            return (
+                              <div className="mt-2 flex items-center gap-2 rounded-lg border border-teal-800/30 bg-teal-950/30 px-3 py-1.5">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-teal-500 shrink-0">{detail.label}</span>
+                                <span className="font-mono text-xs text-slate-300 truncate">{detail.value}</span>
+                              </div>
+                            );
+                          })()}
                         </div>
                         <div className="shrink-0 rounded-2xl border border-teal-800/40 bg-teal-900/20 px-4 py-2 text-center">
                           <p className="text-lg font-black text-white leading-none">{sigCount}<span className="text-slate-500 font-bold text-sm">/{required}</span></p>
