@@ -9,4 +9,8 @@ export default defineConfig({
     tailwindcss(),
     nodePolyfills(),
   ],
+  build: { 
+    target: 'esnext',
+    minify: false 
+  }
 })
