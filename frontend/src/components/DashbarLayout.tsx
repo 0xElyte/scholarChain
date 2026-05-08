@@ -30,8 +30,8 @@ const TREASURY_ADDRESS = (
 ).trim();
 
 export function DashbarLayout() {
-  const { wallet, connect, disconnect, shortAddress } = useWalletContext();
-  const { balance: usdtBalance } = useUSDTBalance(
+  const { wallet } = useWalletContext();
+  const { balance: _usdtBalance } = useUSDTBalance(
     MOCK_USDT_ADDRESS || undefined,
     wallet.address ?? undefined,
   );
