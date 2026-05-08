@@ -131,42 +131,8 @@ export function DashbarLayout() {
             )}
 
             {/* Wallet panel */}
-            <div className="flex items-center gap-2">
-              <div className="h-px flex-1 bg-cyan-950/10" />
-              <span className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-400">
-                Account
-              </span>
-              <div className="h-px flex-1 bg-cyan-950/10" />
-            </div>
-            <div className="rounded-2xl border border-cyan-950/10 bg-[#f7fbfb] p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
-                Wallet
-              </p>
-              {wallet.isConnected ? (
-                <>
-                  <p className="mt-2 font-mono text-sm font-bold text-[#07182b] truncate">
-                    {shortAddress}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {usdtBalance} USDT
-                  </p>
-                  <button
-                    onClick={() => disconnect()}
-                    className="mt-4 w-full rounded-xl border border-cyan-950/10 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
-                  >
-                    Disconnect
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => connect()}
-                  disabled={wallet.isConnecting}
-                  className="mt-3 w-full rounded-xl bg-[#07182b] px-3 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-60 cursor-pointer transition-colors"
-                >
-                  {wallet.isConnecting ? "Connecting…" : "Connect Wallet"}
-                </button>
-              )}
-            </div>
+            
+            
           </div>
         </aside>
 
