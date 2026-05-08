@@ -17,6 +17,7 @@ export interface PoolDetailsData {
   distributionAmount: string;
   distributionEntered: boolean;
   isCancelled: boolean;
+  claimedCount: number;
   signers: string[];
   winners: string[];
   proposalCount: number;
@@ -70,6 +71,7 @@ export async function fetchPoolDetails(
   const proposalCount = summary.proposalCount;
   const distributionEntered = summary.distributionEntered;
   const isCancelled = summary.isCancelled;
+  const claimedCount = summary.claimedCount;
 
   return {
     poolName: name,
@@ -86,6 +88,7 @@ export async function fetchPoolDetails(
     proposalCount: Number(proposalCount ?? 0),
     distributionEntered,
     isCancelled,
+    claimedCount: Number(claimedCount ?? 0),
     signers,
     winners,
     fieldDefinitions: fieldDefinitions.map((f: any) => ({
