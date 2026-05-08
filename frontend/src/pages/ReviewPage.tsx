@@ -9,6 +9,7 @@ import useProposalVotes from "../hooks/read-hooks/useProposalVotes";
 import { customReasonMapper } from "../utils/errorHandler";
 import { shortAddr } from "../utils/format";
 import { bytes32ToCid, ipfsGatewayUrl } from "../utils/ipfs";
+import { Modal } from "../components/Modal";
 
 interface Proposal {
   benefactor: string;
@@ -476,6 +477,7 @@ function ProposalCard(props: ProposalCardProps) {
   const gatewayUrl = proposal.applicantDocCID
     ? ipfsGatewayUrl(proposal.applicantDocCID)
     : null;
+  const [docModal, setDocModal] = useState(false);
 
   const {
     approvals,
@@ -643,37 +645,34 @@ function ProposalCard(props: ProposalCardProps) {
               {isPending ? "Sending..." : "Approve"}
             </button>
           </div>
-
-          <div title={!canVote || isPending ? disableReason : undefined}>
-            <button
-              onClick={() => onVote(proposal.benefactor, false)}
-              disabled={!canVote || isPending}
-              aria-disabled={!canVote || isPending}
-              className={`px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
-                canVote
-                  ? "bg-red-600 text-white shadow hover:scale-105"
-                  : "bg-slate-700 text-slate-300 cursor-not-allowed"
-              }`}
-            >
-              {isPending ? "Sending..." : "Reject"}
-            </button>
-          </div>
         </div>
       </div>
 
       {/* View Doc button */}
       {gatewayUrl && (
         <div className="mb-4">
-          <a
-            href={gatewayUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="w-full inline-block px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 text-slate-100 hover:bg-slate-800 transition-colors no-underline text-center"
+          <button
+            onClick={() => setDocModal(true)}
+            className="w-full px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
           >
             📄 View Full Proposal
-          </a>
+          </button>
         </div>
       )}
+
+      <Modal
+        open={docModal}
+        onClose={() => setDocModal(false)}
+        title="Full Proposal"
+      >
+        <div className="space-y-4">
+          <iframe
+            src={gatewayUrl ?? ""}
+            title="Proposal document"
+            className="w-full h-[70vh] rounded-xl border border-slate-200 bg-white"
+          />
+        </div>
+      </Modal>
     </div>
   );
 }
