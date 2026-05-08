@@ -3,8 +3,10 @@ import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { sepolia, type AppKitNetwork } from "@reown/appkit/networks";
 import type { ReactNode } from "react";
 
-const projectId = import.meta.env.VITE_PROJECT_ID as string;
-if (!projectId) throw new Error("VITE_PROJECT_ID env variable is required");
+const projectId = (import.meta.env.VITE_PROJECT_ID as string) ?? "";
+if (!projectId) {
+  console.warn("VITE_PROJECT_ID env variable is not set — wallet connection will not work.");
+}
 const networks: [AppKitNetwork, ...AppKitNetwork[]] = [sepolia];
 
 const metadata = {
