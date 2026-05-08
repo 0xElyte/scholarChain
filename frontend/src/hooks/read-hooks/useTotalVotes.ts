@@ -48,11 +48,11 @@ export const useTotalVotes = () => {
 
         if (poolAddresses.length === 0) {
           console.warn("[useTotalVotes] No pools found from factory");
-          if (!cancelled) setTotalVotes("0");
+          setTotalVotes("0");
           return;
         }
 
-        const currentBlock = await readOnlyProvider.getBlockNumber();
+        const currentBlock = await logProvider.getBlockNumber();
         console.log(`[useTotalVotes] Current block: ${currentBlock}`);
 
         const chunkSize = 25000;
@@ -62,11 +62,13 @@ export const useTotalVotes = () => {
         // Query votes from each pool contract
         for (const poolAddress of poolAddresses) {
           try {
-            const pc = new Contract(poolAddress, GrantPoolABI, logProvider);
-            const events = await fetchProposalEvents(pc, logProvider);
-            const benefactors = [
-              ...new Set(events.map((e: any) => e.args?.benefactor)),
-            ];
+            const pc = new Contract(
+              poolAddress,
+              GrantPoolABI as any,
+              logProvider,
+            );
+            // Fetch proposal events for validation and counting
+            await fetchProposalEvents(pc, logProvider);
 
             // Verify pool is valid by trying to read pool state
             try {
@@ -92,10 +94,8 @@ export const useTotalVotes = () => {
               fromBlock <= currentBlock;
               fromBlock += chunkSize
             ) {
-              const toBlock = Math.min(fromBlock + chunkSize - 1, currentBlock);
-
               try {
-                const count = await pc.approvalCount(b);
+                const count = await pc.approvalCount(poolAddress);
                 total += BigInt(count.toString());
               } catch {
                 // ignore per-proposal failures
@@ -123,14 +123,18 @@ export const useTotalVotes = () => {
           total.toString(),
         );
 
-        if (!cancelled) setTotalVotes(total.toString());
+        setTotalVotes(total.toString());
       } catch (err) {
         console.error("[useTotalVotes] Failed to fetch total votes:", err);
-        if (!cancelled) setTotalVotes("0");
+        setTotalVotes("0");
       }
     };
 
+    const controller = new AbortController();
     fetchVotes();
+    return () => {
+      controller.abort();
+    };
   }, [factoryContract]);
 
   return totalVotes;
