@@ -20,7 +20,10 @@ const DASH_LINKS = [
   { to: "/dashbar/claim", label: "Claim Center", icon: HandCoins },
 ];
 
-const MOCK_USDT_ADDRESS = (import.meta.env.VITE_MOCK_USDT_ADDRESS || "").trim();
+const MOCK_USDT_ADDRESS = (
+  import.meta.env.VITE_MOCK_USDT_ADDRESS ||
+  "0xf328F1b428748710687A0d275AF939eA100aA29c"
+).trim();
 const SEPOLIA_RPC =
   (import.meta.env.VITE_SEPOLIA_RPC_URL as string | undefined) ??
   "https://ethereum-sepolia-rpc.publicnode.com";
@@ -31,7 +34,7 @@ const TREASURY_ADDRESS = (
 
 export function DashbarLayout() {
   const { wallet } = useWalletContext();
-  const { balance: _usdtBalance } = useUSDTBalance(
+  const { balance: usdtBalance } = useUSDTBalance(
     MOCK_USDT_ADDRESS || undefined,
     wallet.address ?? undefined,
   );
@@ -131,8 +134,14 @@ export function DashbarLayout() {
             )}
 
             {/* Wallet panel */}
-            
-            
+            {wallet.isConnected && (
+              <div className="rounded-2xl border border-cyan-950/10 bg-slate-50 px-3 py-2 flex items-center justify-between">
+                <span className="text-xs text-slate-500">USDT Balance</span>
+                <span className="text-xs font-semibold text-slate-800">
+                  {Number(usdtBalance).toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT
+                </span>
+              </div>
+            )}
           </div>
         </aside>
 
