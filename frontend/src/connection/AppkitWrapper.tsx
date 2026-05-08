@@ -3,7 +3,7 @@ import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { sepolia, type AppKitNetwork } from "@reown/appkit/networks";
 import type { ReactNode } from "react";
 
-const projectId = (import.meta.env.VITE_PROJECT_ID as string | undefined) ?? "";
+const projectId = (import.meta.env.VITE_PROJECT_ID as string | undefined) ?? "51a31cc70130af4f3774aedd8a4b4b07";
 
 const networks: [AppKitNetwork, ...AppKitNetwork[]] = [sepolia];
 
