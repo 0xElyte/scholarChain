@@ -3,7 +3,8 @@ import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { sepolia, type AppKitNetwork } from "@reown/appkit/networks";
 import type { ReactNode } from "react";
 
-const projectId = import.meta.env.VITE_PROJECT_ID as string | undefined;
+const projectId = import.meta.env.VITE_PROJECT_ID as string;
+if (!projectId) throw new Error("VITE_PROJECT_ID env variable is required");
 const networks: [AppKitNetwork, ...AppKitNetwork[]] = [sepolia];
 
 const metadata = {
@@ -19,36 +20,27 @@ const metadata = {
   ],
 };
 
-const appKitConfig = projectId
-  ? {
-      adapters: [new EthersAdapter()],
-      networks,
-      defaultNetwork: sepolia,
-      metadata,
-      projectId,
-      allWallets: "SHOW" as const,
-      enableWallets: true,
-      enableInjected: true,
-      enableEIP6963: true,
-      enableWalletConnect: true,
-      defaultAccountTypes: {
-        eip155: "eoa" as const,
-      },
-      features: {
-        analytics: false,
-        email: false,
-        socials: [],
-      },
-    }
-  : null;
+const appKitConfig = {
+  adapters: [new EthersAdapter()],
+  networks,
+  defaultNetwork: sepolia,
+  metadata,
+  projectId,
+  allWallets: "SHOW" as const,
+  enableWallets: true,
+  enableInjected: true,
+  enableEIP6963: true,
+  enableWalletConnect: true,
+  defaultAccountTypes: {
+    eip155: "eoa" as const,
+  },
+  features: {
+    analytics: false,
+    email: false,
+    socials: [],
+  },
+};
 
 export default function AppkitWrapper({ children }: { children: ReactNode }) {
-  if (!appKitConfig) {
-    console.warn(
-      "Wallet connection is disabled because VITE_PROJECT_ID is missing.",
-    );
-    return <>{children}</>;
-  }
-
   return <AppKitProvider {...appKitConfig}>{children}</AppKitProvider>;
 }
