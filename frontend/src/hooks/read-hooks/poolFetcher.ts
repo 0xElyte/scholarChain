@@ -1,13 +1,14 @@
 import { Contract, getAddress } from "ethers";
 import GrantPoolABI from "../../constants/GrantPoolABI.json";
 import { bytes32ToCid } from "../../utils/ipfs";
+import type { PoolState } from "../../types";
 
 export interface PoolDetailsData {
   poolName: string;
   creator: string;
   poolAddress: string;
   usdtTokenAddress: string;
-  state: string;
+  state: PoolState;
   submissionStart: number;
   submissionEnd: number;
   reviewEnd: number;
@@ -51,7 +52,7 @@ export async function fetchPoolDetails(
 
   const name = summary.poolName;
   const creator = summary.creator;
-  const STATE_MAP: Record<number, string> = {
+  const STATE_MAP: Record<number, PoolState> = {
     0: "PENDING",
     1: "ACTIVE",
     2: "REVIEW",
@@ -60,7 +61,7 @@ export async function fetchPoolDetails(
     5: "CANCELLED",
   };
 
-  const state = STATE_MAP[Number(summary.state)] || "CLOSED";
+  const state: PoolState = STATE_MAP[Number(summary.state)] ?? "CLOSED";
   const submissionStart = summary.submissionStart;
   const submissionEnd = summary.submissionEnd;
   const reviewEnd = summary.reviewEnd;

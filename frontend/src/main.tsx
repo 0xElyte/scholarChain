@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+globalThis.Buffer = globalThis.Buffer || Buffer;
 import { StrictMode, Component, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
