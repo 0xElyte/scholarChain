@@ -1,11 +1,18 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Compass, PlusCircle, ClipboardList } from "lucide-react";
+import {
+  LayoutDashboard,
+  Compass,
+  PlusCircle,
+  ClipboardList,
+  HandCoins,
+} from "lucide-react";
 
 const DASH_LINKS = [
   { to: "/dashbar/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/dashbar/explore", label: "Explore Pools", icon: Compass },
   { to: "/dashbar/create", label: "Create Pool", icon: PlusCircle },
   { to: "/dashbar/review", label: "Review", icon: ClipboardList },
+  { to: "/dashbar/claim", label: "Claim Center", icon: HandCoins },
 ];
 
 export function DashbarLayout() {

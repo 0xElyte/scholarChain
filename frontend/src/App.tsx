@@ -14,6 +14,7 @@ import { LandingPage } from "./pages/LandingPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ExplorerPage } from "./pages/ExplorerPage";
 import { CreatePoolPage } from "./pages/CreatePoolPage";
+import { ClaimPage } from "./pages/ClaimPage";
 import { PoolDetailPage } from "./pages/PoolDetailPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import AppkitWrapper from "./connection/AppkitWrapper";
@@ -61,6 +62,7 @@ function App() {
                 <Route path="explore" element={<ExplorerPage />} />
                 <Route path="create" element={<CreatePoolPage />} />
                 <Route path="review" element={<ReviewPage />} />
+                <Route path="claim" element={<ClaimPage />} />
                 <Route path="pool/:address" element={<PoolDetailPage />} />
               </Route>
               <Route
@@ -74,6 +76,10 @@ function App() {
               <Route
                 path="/create"
                 element={<Navigate to="/dashbar/create" replace />}
+              />
+              <Route
+                path="/claim"
+                element={<Navigate to="/dashbar/claim" replace />}
               />
               <Route
                 path="/pool/:address"

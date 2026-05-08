@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import { Contract, getAddress } from "ethers";
+import { Contract, getAddress, Interface } from "ethers";
 import { useWalletContext } from "../connection/WalletContext";
 import { useAllPools } from "../hooks/read-hooks/useAllPools";
+import { usePoolDetails } from "../hooks/read-hooks/usePoolDetails";
 import useRunners from "../hooks/useRunners";
 import GrantPoolABI from "../constants/GrantPoolABI.json";
+import useProposalVotes from "../hooks/read-hooks/useProposalVotes";
+import { customReasonMapper } from "../utils/errorHandler";
 import { shortAddr } from "../utils/format";
 import { bytes32ToCid, ipfsGatewayUrl } from "../utils/ipfs";
 
@@ -18,6 +21,7 @@ interface Proposal {
   title?: string;
   description?: string;
   applicantDocCID?: string;
+  formFields?: Array<{ label: string; value: string }>;
   loading?: boolean;
 }
 
@@ -32,9 +36,23 @@ interface ProposalMetadata {
   }>;
 }
 
-async function fetchProposalMetadata(
-  cid: string,
-): Promise<{ title?: string; description?: string; applicantDocCID?: string }> {
+interface ProposalCardProps {
+  proposal: Proposal;
+  onVote: (benefactor: string, approve: boolean) => void;
+  isPending: boolean;
+  poolState: string;
+  poolAddress: string;
+  votesRefreshTick?: number;
+}
+
+const grantPoolInterface = new Interface(GrantPoolABI as any);
+
+async function fetchProposalMetadata(cid: string): Promise<{
+  title?: string;
+  description?: string;
+  applicantDocCID?: string;
+  formFields?: Array<{ label: string; value: string }>;
+}> {
   try {
     const url = ipfsGatewayUrl(cid);
     if (!url) return {};
@@ -49,10 +67,18 @@ async function fetchProposalMetadata(
       data.fields?.[0]?.value?.substring(100, 300) ||
       "";
 
+    // Extract all form fields (questions and answers)
+    const formFields =
+      data.fields?.map((field) => ({
+        label: field.label,
+        value: field.value,
+      })) || [];
+
     return {
       title: title || undefined,
       description: description || undefined,
       applicantDocCID: data.benefactorDocumentCID || undefined,
+      formFields: formFields.length > 0 ? formFields : undefined,
     };
   } catch (err) {
     console.debug("Failed to fetch proposal metadata:", err);
@@ -69,8 +95,13 @@ export function ReviewPage() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loadingProposals, setLoadingProposals] = useState(false);
   const [pendingVotes, setPendingVotes] = useState<Set<string>>(new Set());
+  const [votesRefreshTick, setVotesRefreshTick] = useState<number>(0);
   const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(
     null,
+  );
+
+  const { poolData: selectedPoolDetails } = usePoolDetails(
+    selectedPool ?? undefined,
   );
 
   const addr = wallet.address?.toLowerCase();
@@ -78,6 +109,8 @@ export function ReviewPage() {
     p.signers?.some((s) => s.toLowerCase() === addr),
   );
   const selectedPoolData = signerPools.find((p) => p.address === selectedPool);
+  const selectedPoolState =
+    selectedPoolDetails?.state ?? selectedPoolData?.state ?? "";
 
   function showToast(text: string, ok = true) {
     setToast({ text, ok });
@@ -131,7 +164,7 @@ export function ReviewPage() {
           benefactors,
         );
 
-        const results: Proposal[] = await Promise.all(
+        const results: Array<Proposal | null> = await Promise.all(
           benefactors.map(async (benefactor) => {
             try {
               const p = await pc.getProposal(benefactor);
@@ -156,7 +189,7 @@ export function ReviewPage() {
                 : rawCid;
 
               // Fetch proposal metadata from IPFS
-              const { title, description, applicantDocCID } =
+              const { title, description, applicantDocCID, formFields } =
                 await fetchProposalMetadata(cid);
 
               // Check if voted NO (rejected)
@@ -180,6 +213,7 @@ export function ReviewPage() {
                 title,
                 description,
                 applicantDocCID,
+                formFields,
               };
             } catch (err) {
               console.error(`Error processing benefactor ${benefactor}:`, err);
@@ -209,10 +243,26 @@ export function ReviewPage() {
   }, [selectedPool, readOnlyProvider, wallet.address]);
 
   async function handleVote(benefactor: string, approve: boolean) {
-    if (!signer || !selectedPool) return;
+    if (!signer || !selectedPool || selectedPoolState !== "ACTIVE") return;
     try {
       setPendingVotes((prev) => new Set([...prev, benefactor]));
       const pc = new Contract(getAddress(selectedPool), GrantPoolABI, signer);
+      // Double-check on-chain that the connected signer hasn't already voted for this benefactor.
+      try {
+        const signerAddr = (await signer.getAddress()).toLowerCase();
+        const already = await pc.hasVoted(signerAddr, getAddress(benefactor));
+        if (already) {
+          showToast("You already voted on this proposal", false);
+          return;
+        }
+      } catch (checkErr) {
+        // If the read fails, continue — contract may not implement hasVoted reliably for this caller.
+        console.debug(
+          "hasVoted check failed, continuing to attempt vote:",
+          checkErr,
+        );
+      }
+
       const tx = await pc.vote(getAddress(benefactor), approve);
       await tx.wait();
 
@@ -230,16 +280,47 @@ export function ReviewPage() {
       );
       showToast(approve ? "Vote cast successfully" : "Rejection recorded");
     } catch (err) {
-      showToast(
-        err instanceof Error ? err.message : "Transaction failed",
-        false,
-      );
+      // Try to extract revert payload and decode with the contract ABI, then map to friendly message
+      const candidateData = [
+        (err as { data?: unknown }).data,
+        (err as { info?: { error?: { data?: unknown } } }).info?.error?.data,
+        (err as { error?: { data?: unknown } }).error?.data,
+      ].find((value): value is string => typeof value === "string");
+
+      if (candidateData) {
+        try {
+          const decoded = grantPoolInterface.parseError(candidateData);
+          showToast(customReasonMapper(decoded as any), false);
+        } catch {
+          const msg =
+            (err as any)?.error?.message ||
+            (err as any)?.message ||
+            String(err);
+          showToast(
+            msg.includes("revert") ? "Transaction would revert" : msg,
+            false,
+          );
+        }
+      } else {
+        const msg =
+          (err as any)?.error?.message || (err as any)?.message || String(err);
+        if ((err as any)?.code === "CALL_EXCEPTION" || msg.includes("revert")) {
+          showToast(
+            "Transaction would revert (maybe you already voted)",
+            false,
+          );
+        } else {
+          showToast(msg, false);
+        }
+      }
     } finally {
       setPendingVotes((prev) => {
         const next = new Set(prev);
         next.delete(benefactor);
         return next;
       });
+      // Trigger votes refresh so hooks re-query immediately after the tx is mined
+      setVotesRefreshTick((t) => t + 1);
     }
   }
 
@@ -369,7 +450,9 @@ export function ReviewPage() {
                     proposal={proposal}
                     onVote={handleVote}
                     isPending={pendingVotes.has(proposal.benefactor)}
-                    poolState={selectedPoolData?.state ?? ""}
+                    poolState={selectedPoolState}
+                    poolAddress={selectedPool!}
+                    votesRefreshTick={votesRefreshTick}
                   />
                 ))}
               </div>
@@ -381,56 +464,83 @@ export function ReviewPage() {
   );
 }
 
-function ProposalCard({
-  proposal,
-  onVote,
-  isPending,
-  poolState,
-}: {
-  proposal: Proposal;
-  onVote: (benefactor: string, approve: boolean) => void;
-  isPending: boolean;
-  poolState: string;
-}) {
+function ProposalCard(props: ProposalCardProps) {
+  const {
+    proposal,
+    onVote,
+    isPending,
+    poolState,
+    poolAddress,
+    votesRefreshTick,
+  } = props;
   const gatewayUrl = proposal.applicantDocCID
     ? ipfsGatewayUrl(proposal.applicantDocCID)
     : null;
 
-  const canVote =
-    poolState === "REVIEW" &&
-    !proposal.hasVoted &&
-    !proposal.hasRejected &&
-    !proposal.isWinner;
+  const {
+    approvals,
+    rejections,
+    totalVotes,
+    voters,
+    signerCount,
+    hasVoted: userHasVoted,
+  } = useProposalVotes(poolAddress, proposal.benefactor, votesRefreshTick);
+
+  const canVote = poolState === "ACTIVE" && !proposal.isWinner && !userHasVoted;
+
+  const isPoolActive = poolState === "ACTIVE";
+  const disableReason = isPending
+    ? "Transaction pending"
+    : !isPoolActive
+      ? "Voting is only available during ACTIVE pool state"
+      : proposal.isWinner
+        ? "This proposal has already been selected"
+        : userHasVoted
+          ? "You already reviewed this proposal"
+          : "";
 
   // Determine status badge
-  let statusLabel = "Pending";
-  let statusColor = "slate";
+  let statusLabel = "IN REVIEW";
+  let statusColor = "amber";
   if (proposal.isWinner) {
-    statusLabel = "Approved";
+    statusLabel = "APPROVED WINNER";
+    statusColor = "purple";
+  } else if (
+    approvals >= Math.ceil((signerCount * 70) / 100) &&
+    signerCount > 0
+  ) {
+    statusLabel = "QUORUM REACHED";
     statusColor = "emerald";
-  } else if (proposal.hasVoted && !proposal.hasRejected) {
-    statusLabel = "Approved";
-    statusColor = "emerald";
-  } else if (proposal.hasRejected) {
-    statusLabel = "Rejected";
+  } else if (rejections > 0 && approvals === 0 && totalVotes > 0) {
+    statusLabel = "NOT SELECTED";
     statusColor = "red";
+  } else if (userHasVoted) {
+    statusLabel = "YOU VOTED";
+    statusColor = "blue";
   }
 
-  const statusBgColor = {
-    emerald: "bg-emerald-50 text-emerald-700 border border-emerald-200",
-    red: "bg-red-50 text-red-700 border border-red-200",
-    slate: "bg-slate-100 text-slate-700 border border-slate-200",
-  }[statusColor];
+  const statusPalette = {
+    emerald: "bg-emerald-900/70 text-emerald-300 border border-emerald-700",
+    red: "bg-red-900/60 text-red-300 border border-red-700",
+    amber: "bg-amber-900/60 text-amber-300 border border-amber-700",
+    purple:
+      "bg-gradient-to-r from-purple-700 to-violet-500 text-white border border-purple-600",
+    blue: "bg-sky-900/60 text-sky-300 border border-sky-700",
+  } as const;
+
+  const statusBgColor =
+    statusPalette[statusColor as keyof typeof statusPalette] ||
+    "bg-slate-100 text-slate-700 border border-slate-200";
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
+    <div className="rounded-2xl border border-slate-800 bg-[#071826] p-6 shadow-lg hover:shadow-2xl transition-shadow backdrop-blur-md">
       {/* Header: Address + Status Badge */}
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
           <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">
             Applicant Wallet
           </p>
-          <p className="text-sm font-mono font-bold text-teal-600">
+          <p className="text-sm font-mono font-bold text-teal-300">
             {shortAddr(proposal.benefactor)}
           </p>
         </div>
@@ -441,70 +551,129 @@ function ProposalCard({
         </div>
       </div>
 
-      {/* Title */}
-      {proposal.title && (
-        <h3 className="text-base font-bold text-slate-900 mb-2 line-clamp-2">
-          {proposal.title}
-        </h3>
+      {/* Form Fields (Questions & Answers) */}
+      {proposal.formFields && proposal.formFields.length > 0 && (
+        <div className="mb-4 space-y-3 pb-4 border-b border-slate-700">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            Answers
+          </p>
+          {proposal.formFields.map((field, idx) => (
+            <div key={idx} className="text-sm">
+              <p className="text-xs font-semibold text-slate-300 mb-1">
+                Q: {field.label}
+              </p>
+              <p className="text-xs text-slate-100 bg-slate-800/40 p-2 rounded border border-slate-700">
+                {field.value}
+              </p>
+            </div>
+          ))}
+        </div>
       )}
 
-      {/* Description */}
-      {proposal.description && (
-        <p className="text-sm text-slate-600 mb-4 line-clamp-3">
-          {proposal.description}
-        </p>
-      )}
+      {/* Quorum / progress */}
+      <div className="mb-4 pb-4 border-b border-slate-700 pt-3">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <p className="text-xs text-slate-400">Approvals</p>
+            <p className="text-lg font-semibold text-white">
+              {approvals} / {signerCount || 0}
+            </p>
+          </div>
+          <div className="text-right text-xs text-slate-400">
+            <p>
+              Quorum Needed:{" "}
+              <span className="font-semibold text-white">
+                {Math.ceil((signerCount * 70) / 100) || 0}
+              </span>
+            </p>
+            <p>
+              Remaining:{" "}
+              <span className="font-semibold text-white">
+                {Math.max(0, Math.ceil((signerCount * 70) / 100) - approvals)}
+              </span>
+            </p>
+          </div>
+        </div>
 
-      {/* Approval count */}
-      <div className="mb-4 pb-4 border-t border-slate-100 pt-3">
-        <p className="text-xs text-slate-500">
-          Approval votes:{" "}
-          <span className="font-bold text-slate-700">
-            {proposal.approvalCount}
-          </span>
-        </p>
+        <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all"
+            style={{
+              width: `${signerCount > 0 ? Math.min(100, Math.round((approvals / signerCount) * 100)) : 0}%`,
+              background: "linear-gradient(90deg,#06b6d4,#7c3aed)",
+              boxShadow: "0 6px 18px rgba(124,58,237,0.24)",
+            }}
+          />
+        </div>
       </div>
 
-      {/* Action buttons */}
-      <div className="flex gap-3">
-        {gatewayUrl && (
+      {/* Reviewer indicators and actions */}
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          {Array.from({ length: signerCount || 5 }).map((_, i) => {
+            const voted = voters[i]?.approved ?? false;
+            return (
+              <div
+                key={i}
+                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
+                  voted
+                    ? "bg-emerald-400 text-black"
+                    : "bg-slate-700 text-slate-300"
+                }`}
+                title={voters[i]?.voter || "Pending"}
+              >
+                {voted ? "✔" : "○"}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div title={!canVote || isPending ? disableReason : undefined}>
+            <button
+              onClick={() => onVote(proposal.benefactor, true)}
+              disabled={!canVote || isPending}
+              aria-disabled={!canVote || isPending}
+              className={`px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
+                canVote
+                  ? "bg-gradient-to-r from-teal-400 to-cyan-400 text-black shadow-lg hover:scale-105"
+                  : "bg-slate-700 text-slate-300 cursor-not-allowed"
+              }`}
+            >
+              {isPending ? "Sending..." : "Approve"}
+            </button>
+          </div>
+
+          <div title={!canVote || isPending ? disableReason : undefined}>
+            <button
+              onClick={() => onVote(proposal.benefactor, false)}
+              disabled={!canVote || isPending}
+              aria-disabled={!canVote || isPending}
+              className={`px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
+                canVote
+                  ? "bg-red-600 text-white shadow hover:scale-105"
+                  : "bg-slate-700 text-slate-300 cursor-not-allowed"
+              }`}
+            >
+              {isPending ? "Sending..." : "Reject"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* View Doc button */}
+      {gatewayUrl && (
+        <div className="mb-4">
           <a
             href={gatewayUrl}
             target="_blank"
             rel="noreferrer"
-            className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors no-underline text-center"
+            className="w-full inline-block px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 text-slate-100 hover:bg-slate-800 transition-colors no-underline text-center"
           >
-            📄 View Doc
+            📄 View Full Proposal
           </a>
-        )}
-
-        {canVote ? (
-          <>
-            <button
-              onClick={() => onVote(proposal.benefactor, true)}
-              disabled={isPending}
-              className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isPending ? "…" : "Approve"}
-            </button>
-            <button
-              onClick={() => onVote(proposal.benefactor, false)}
-              disabled={isPending}
-              className="px-3 py-2 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isPending ? "…" : "✕"}
-            </button>
-          </>
-        ) : proposal.hasVoted ? (
-          <div className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-center">
-            ✓ Voted
-          </div>
-        ) : proposal.hasRejected ? (
-          <div className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-red-50 text-red-700 border border-red-200 text-center">
-            Rejected
-          </div>
-        ) : null}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
