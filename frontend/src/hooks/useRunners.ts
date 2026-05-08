@@ -1,29 +1,46 @@
-import { useAppKitProvider, useAppKitAccount } from "@reown/appkit/react";
-import { BrowserProvider, JsonRpcSigner } from "ethers";
-import type { Eip1193Provider } from "ethers";
+import { useAppKitAccount, useAppKitProvider } from "@reown/appkit/react";
+import { BrowserProvider } from "ethers";
+import type { Eip1193Provider, JsonRpcSigner } from "ethers";
 import { useEffect, useMemo, useState } from "react";
 import { jsonRpcProvider } from "../constants/provider";
 
 const useRunners = () => {
-    const [signer, setSigner] = useState<JsonRpcSigner>();
-    const { walletProvider } = useAppKitProvider<Eip1193Provider>("eip155");
-    const { address } = useAppKitAccount();
+  const [signer, setSigner] = useState<JsonRpcSigner>();
+  const { walletProvider } = useAppKitProvider<Eip1193Provider>("eip155");
+  const { address, isConnected } = useAppKitAccount({ namespace: "eip155" });
 
-    const provider = useMemo(() => (walletProvider ? new BrowserProvider(walletProvider) : null), [walletProvider]);
+  const provider = useMemo(
+    () => (walletProvider ? new BrowserProvider(walletProvider) : null),
+    [walletProvider],
+  );
 
-    useEffect(() => {
-        if (!provider || !address) {
-            setSigner(undefined);
-            return;
+  useEffect(() => {
+    if (!provider || !address || !isConnected) {
+      setSigner(undefined);
+      return;
+    }
+
+    let cancelled = false;
+
+    void provider
+      .getSigner(address)
+      .then((newSigner) => {
+        if (!cancelled) {
+          setSigner(newSigner);
         }
-        provider.getSigner().then((newSigner) => {
-            if (!signer) return setSigner(newSigner);
-            if (newSigner.address === signer.address) return;
-            setSigner(newSigner);
-        });
-    }, [provider, signer, address]);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSigner(undefined);
+        }
+      });
 
-    return { provider, signer, readOnlyProvider: jsonRpcProvider };
+    return () => {
+      cancelled = true;
+    };
+  }, [provider, address, isConnected]);
+
+  return { provider, signer, readOnlyProvider: jsonRpcProvider };
 };
 
 export default useRunners;

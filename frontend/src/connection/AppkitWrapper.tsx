@@ -1,30 +1,54 @@
-import { createAppKit } from "@reown/appkit/react";
+import { AppKitProvider } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
-import { sepolia , type AppKitNetwork } from "@reown/appkit/networks";
+import { sepolia, type AppKitNetwork } from "@reown/appkit/networks";
 import type { ReactNode } from "react";
 
-const projectId = import.meta.env.VITE_PROJECT_ID;
-
+const projectId = import.meta.env.VITE_PROJECT_ID as string | undefined;
 const networks: [AppKitNetwork, ...AppKitNetwork[]] = [sepolia];
 
 const metadata = {
   name: "ScholarChain",
   description:
-    "A decentralized grant protocol that connects donors, reviewers, and beneficiaries through transparent smart contracts, enabling trustless funding, verifiable achievements, and on-chain recognition of impact.",
-  url: "http://localhost:5173/",
-  icons: ["https://avatars.mywebsite.com/"],
+    "A decentralized grant protocol for transparent grant funding, review, and distribution.",
+  url:
+    (import.meta.env.VITE_APP_URL as string | undefined) ??
+    (typeof window !== "undefined" ? window.location.origin : "https://localhost:5173"),
+  icons: [
+    (import.meta.env.VITE_APP_ICON as string | undefined) ??
+      "https://raw.githubusercontent.com/Feyisara2108/scholarChain/dev/frontend/public/favicon.svg",
+  ],
 };
 
-createAppKit({
-  adapters: [new EthersAdapter()],
-  networks,
-  metadata,
-  projectId,
-  features: {
-    analytics: true, // Optional - defaults to your Cloud configuration
-  },
-});
+const appKitConfig = projectId
+  ? {
+      adapters: [new EthersAdapter()],
+      networks,
+      defaultNetwork: sepolia,
+      metadata,
+      projectId,
+      allWallets: "SHOW" as const,
+      enableWallets: true,
+      enableInjected: true,
+      enableEIP6963: true,
+      enableWalletConnect: true,
+      defaultAccountTypes: {
+        eip155: "eoa" as const,
+      },
+      features: {
+        analytics: false,
+        email: false,
+        socials: [],
+      },
+    }
+  : null;
 
 export default function AppkitWrapper({ children }: { children: ReactNode }) {
-  return <div>{children}</div>;
+  if (!appKitConfig) {
+    console.warn(
+      "Wallet connection is disabled because VITE_PROJECT_ID is missing.",
+    );
+    return <>{children}</>;
+  }
+
+  return <AppKitProvider {...appKitConfig}>{children}</AppKitProvider>;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Contract, Interface, getAddress, isAddress, parseUnits } from "ethers";
 import type { UserRole } from "../types";
@@ -1065,7 +1065,7 @@ function Card({
   highlight,
 }: {
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
   highlight?: boolean;
 }) {
   return (

@@ -9,7 +9,9 @@ import type { WalletState } from "../types";
 export function useWallet() {
   const { open } = useAppKit();
   const { disconnect: disconnectAppKit } = useDisconnect();
-  const { address, isConnected, status } = useAppKitAccount();
+  const { address, isConnected, status } = useAppKitAccount({
+    namespace: "eip155",
+  });
 
   const wallet = useMemo<WalletState>(
     () => ({
@@ -22,16 +24,20 @@ export function useWallet() {
   );
 
   const connect = useCallback(async () => {
-    await open();
+    await open({ view: "Connect", namespace: "eip155" });
+  }, [open]);
+
+  const manageWallet = useCallback(async () => {
+    await open({ view: "Account", namespace: "eip155" });
   }, [open]);
 
   const disconnect = useCallback(async () => {
-    await disconnectAppKit();
+    await disconnectAppKit({ namespace: "eip155" });
   }, [disconnectAppKit]);
 
   const shortAddress = wallet.address
     ? `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`
     : null;
 
-  return { wallet, connect, disconnect, shortAddress };
+  return { wallet, connect, manageWallet, disconnect, shortAddress };
 }

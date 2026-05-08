@@ -463,24 +463,24 @@ contract GrantPool is AccessControl, ReentrancyGuard, Pausable {
         return _fieldDefinitions;
     }
 
-    /// @notice Single-call summary of this pool — use instead of individual public var reads.
+    // Single-call summary of this pool — use instead of individual public var reads.
     function getPoolSummary() external view returns (PoolSummary memory) {
         return PoolSummary({
-            poolAddress:         address(this),
-            poolName:            poolName,
-            state:               _toStateEnum(_state()),
-            creator:             creator,
-            totalDeposited:      totalDeposited,
-            submissionStart:     submissionStart,
-            submissionEnd:       submissionEnd,
-            reviewEnd:           reviewEnd,
-            signerCount:         signers.length,
-            winnersCount:        winners.length,
-            claimedCount:        _claimedCount,
-            proposalCount:       _proposalCount,
-            distributionAmount:  distributionAmount,
+            poolAddress: address(this),
+            poolName: poolName,
+            state: _toStateEnum(_state()),
+            creator: creator,
+            totalDeposited: totalDeposited,
+            submissionStart: submissionStart,
+            submissionEnd: submissionEnd,
+            reviewEnd: reviewEnd,
+            signerCount: signers.length,
+            winnersCount: winners.length,
+            claimedCount: _claimedCount,
+            proposalCount: _proposalCount,
+            distributionAmount: distributionAmount,
             distributionEntered: distributionEntered,
-            isCancelled:         isCancelled
+            isCancelled: isCancelled
         });
     }
 

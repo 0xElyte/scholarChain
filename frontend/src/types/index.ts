@@ -59,6 +59,7 @@ export interface WalletState {
   isConnected: boolean;
   isConnecting: boolean;
   balance: string;
+  error?: string | null;
 }
 
 export type UserRole = "creator" | "signer" | "applicant" | "winner" | "donor" | "visitor";

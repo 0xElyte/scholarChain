@@ -1,26 +1,45 @@
 import { useEffect, useState } from "react";
-import { Contract } from "ethers";
+import { Contract, JsonRpcProvider } from "ethers";
 import { useFactoryContract } from "../useContracts";
-import useRunners from "../useRunners";
 import GrantPoolABI from "../../constants/GrantPoolABI.json";
+
+// Use publicnode for unrestricted eth_getLogs (Alchemy free tier caps at 10 blocks)
+const LOG_RPC = "https://ethereum-sepolia-rpc.publicnode.com";
 
 export const useTotalVotes = () => {
   const [totalVotes, setTotalVotes] = useState<string>("0");
   const factoryContract = useFactoryContract();
-  const { readOnlyProvider } = useRunners();
 
   useEffect(() => {
-    let cancelled = false;
+    const fetchProposalEvents = async (
+      pc: Contract,
+      logProvider: JsonRpcProvider,
+    ) => {
+      const latest = await logProvider.getBlockNumber();
+      const chunkSize = 49_000;
+      const events: any[] = [];
+
+      for (let fromBlock = 0; fromBlock <= latest; fromBlock += chunkSize) {
+        const toBlock = Math.min(fromBlock + chunkSize - 1, latest);
+        const batch = await pc.queryFilter(
+          pc.filters.ProposalSubmitted(),
+          fromBlock,
+          toBlock,
+        );
+        events.push(...batch);
+      }
+
+      return events;
+    };
 
     const fetchVotes = async () => {
       try {
-        if (!factoryContract || !readOnlyProvider) {
-          console.warn("Missing factoryContract or readOnlyProvider");
-          if (!cancelled) setTotalVotes("0");
+        if (!factoryContract) {
+          setTotalVotes("0");
           return;
         }
 
-        // Get all pool addresses from factory contract
+        const logProvider = new JsonRpcProvider(LOG_RPC);
         const poolAddresses: string[] = await factoryContract.getAllPools();
         console.log(
           `[useTotalVotes] Found ${poolAddresses.length} pools from factory:`,
@@ -43,15 +62,11 @@ export const useTotalVotes = () => {
         // Query votes from each pool contract
         for (const poolAddress of poolAddresses) {
           try {
-            console.log(
-              `[useTotalVotes] Fetching votes from pool: ${poolAddress}`,
-            );
-
-            const pc = new Contract(
-              poolAddress,
-              GrantPoolABI,
-              readOnlyProvider,
-            );
+            const pc = new Contract(poolAddress, GrantPoolABI, logProvider);
+            const events = await fetchProposalEvents(pc, logProvider);
+            const benefactors = [
+              ...new Set(events.map((e: any) => e.args?.benefactor)),
+            ];
 
             // Verify pool is valid by trying to read pool state
             try {
@@ -80,25 +95,10 @@ export const useTotalVotes = () => {
               const toBlock = Math.min(fromBlock + chunkSize - 1, currentBlock);
 
               try {
-                const voteEvents = await pc.queryFilter(
-                  pc.filters.VoteCast(),
-                  fromBlock,
-                  toBlock,
-                );
-
-                // Log vote details for validation
-                if (voteEvents.length > 0) {
-                  console.log(
-                    `[useTotalVotes] Pool ${poolAddress} blocks ${fromBlock}-${toBlock}: ${voteEvents.length} votes`,
-                  );
-                }
-
-                poolVoteCount += voteEvents.length;
-              } catch (chunkErr) {
-                console.warn(
-                  `[useTotalVotes] Error querying blocks ${fromBlock}-${toBlock} for pool ${poolAddress}:`,
-                  chunkErr,
-                );
+                const count = await pc.approvalCount(b);
+                total += BigInt(count.toString());
+              } catch {
+                // ignore per-proposal failures
               }
             }
 
@@ -131,10 +131,7 @@ export const useTotalVotes = () => {
     };
 
     fetchVotes();
-    return () => {
-      cancelled = true;
-    };
-  }, [factoryContract, readOnlyProvider]);
+  }, [factoryContract]);
 
   return totalVotes;
 };

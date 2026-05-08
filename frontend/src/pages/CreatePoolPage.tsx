@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { getAddress, isAddress } from "ethers";
 import type { FieldDefinition } from "../types";
@@ -104,8 +104,8 @@ export function CreatePoolPage() {
         criteriaMetadataCID: cid,
       }));
       setCriteriaUploadState("done");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Upload failed.";
+    } catch {
+      const message = "Upload failed.";
       setCriteriaUploadState("error");
       setCriteriaUploadError(message);
       setForm((f) => ({
@@ -663,7 +663,7 @@ function Fieldset({
 }: {
   title: string;
   desc?: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div className="scholar-card rounded-2xl p-6">
@@ -687,7 +687,7 @@ function Field({
   required?: boolean;
   hint?: string;
   error?: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div>
