@@ -1,13 +1,18 @@
 import { useWalletContext } from "../connection/WalletContext";
 
 export default function ConnectButton() {
-  const { wallet, connect } = useWalletContext();
+  const { wallet, connect, manageWallet } = useWalletContext();
 
   const shortAddress = wallet.address
     ? `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`
     : null;
 
   async function handleClick() {
+    if (wallet.isConnected) {
+      await manageWallet();
+      return;
+    }
+
     await connect();
   }
 
