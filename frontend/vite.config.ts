@@ -7,4 +7,17 @@ export default defineConfig({
   define: {
     global: 'globalThis',
   },
+  optimizeDeps: {
+    include: [
+      'ethers',
+      '@reown/appkit',
+      '@reown/appkit-adapter-ethers',
+      '@reown/appkit/networks',
+    ],
+  },
+  build: {
+    commonjsOptions: {
+      transformMixedEsModules: true,
+    },
+  },
 })
