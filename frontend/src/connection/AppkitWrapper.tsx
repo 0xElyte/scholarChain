@@ -20,8 +20,7 @@ const metadata = {
   ],
 };
 
-const appKitConfig = projectId
-  ? {
+const appKitConfig = {
       adapters: [new EthersAdapter()],
       networks,
       defaultNetwork: sepolia,
@@ -40,13 +39,8 @@ const appKitConfig = projectId
         email: false,
         socials: [],
       },
-    }
-  : null;
+    };
 
 export default function AppkitWrapper({ children }: { children: ReactNode }) {
-  if (!appKitConfig) {
-    console.warn("VITE_PROJECT_ID is not set — wallet connection is disabled.");
-    return <>{children}</>;
-  }
   return <AppKitProvider {...appKitConfig}>{children}</AppKitProvider>;
 }
