@@ -7,6 +7,7 @@ import { Modal } from "../components/Modal";
 import { useWalletContext } from "../connection/WalletContext";
 import { useDeployPool } from "../hooks/write-hooks/useDeployPool";
 import useDonatePool from "../hooks/write-hooks/useDonatePool";
+import { customReasonMapper } from "../utils/errorHandler";
 import { uploadPdfToPinata } from "../utils/pinata";
 
 interface FormState {
@@ -42,6 +43,10 @@ type FormErrors = Partial<
 const CREATE_POOL_PHOTO =
   "https://images.unsplash.com/photo-1741699428220-65f37f3fbbcb?auto=format&fit=crop&w=1000&q=80";
 
+function factoryError(name: string): string {
+  return customReasonMapper({ name, args: [], reason: "" } as never);
+}
+
 export function CreatePoolPage() {
   const { wallet } = useWalletContext();
   const navigate = useNavigate();
@@ -56,6 +61,7 @@ export function CreatePoolPage() {
   const [fields, setFields] = useState<FieldDefinition[]>([
     { fieldType: FieldType.TEXT, label: "", required: true },
   ]);
+  const [deployedPoolName, setDeployedPoolName] = useState<string | null>(null);
   const [successModal, setSuccess] = useState(false);
   const [postDeployNotice, setPostDeployNotice] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -133,10 +139,12 @@ export function CreatePoolPage() {
     if (form.submissionStart && form.submissionEnd) {
       const start = new Date(form.submissionStart).getTime() / 1000;
       const end = new Date(form.submissionEnd).getTime() / 1000;
-      if (start <= Date.now() / 1000)
-        e.submissionStart = "Must be in the future.";
-      if (end <= start + 86400)
-        e.submissionEnd = "Must be at least 1 day after start.";
+      if (start <= Date.now() / 1000) {
+        e.submissionStart = factoryError("Factory__SubmissionStartInPast");
+      }
+      if (end <= start + 86400) {
+        e.submissionEnd = factoryError("Factory__SubmissionWindowTooShort");
+      }
     }
     if (Number(form.reviewDuration) < 1) e.reviewDuration = "Minimum 1 day.";
 
@@ -227,10 +235,36 @@ export function CreatePoolPage() {
       }
 
       setSuccess(true);
-    } catch {
+      // capture deployed pool name for the modal, then clear inputs
+      setDeployedPoolName(form.poolName);
+      setForm(EMPTY_FORM);
+      setFields([{ fieldType: FieldType.TEXT, label: "", required: true }]);
+      setCriteriaUploadState("idle");
+      setCriteriaUploadError(null);
+      setErrors({});
+    } catch (err) {
       // Error is already handled by useDeployPool hook
       return;
     }
+  }
+
+  function closeSuccessModal(redirectTo?: string | null) {
+    setSuccess(false);
+    setDeployedPoolName(null);
+    setForm(EMPTY_FORM);
+    setFields([{ fieldType: FieldType.TEXT, label: "", required: true }]);
+    setCriteriaUploadState("idle");
+    setCriteriaUploadError(null);
+    setErrors({});
+
+    if (redirectTo === null) return;
+    if (redirectTo) navigate(redirectTo);
+    else
+      navigate(
+        createdPoolAddress
+          ? `/dashbar/pool/${createdPoolAddress}`
+          : "/dashbar/explore",
+      );
   }
 
   if (!wallet.isConnected) {
@@ -573,20 +607,14 @@ export function CreatePoolPage() {
 
       <Modal
         open={successModal}
-        onClose={() => {
-          setSuccess(false);
-          navigate(
-            createdPoolAddress
-              ? `/dashbar/pool/${createdPoolAddress}`
-              : "/dashbar/explore",
-          );
-        }}
+        onClose={() => closeSuccessModal()}
         title="Pool Deployed On-Chain"
       >
         <div className="text-center py-4">
           <p className="text-5xl mb-4">🎉</p>
           <p className="text-slate-700 mb-1">
-            Your pool <strong>{form.poolName}</strong> has been deployed.
+            Your pool <strong>{deployedPoolName ?? "pool"}</strong> has been
+            deployed.
           </p>
           <p className="text-sm text-slate-500 mb-6">
             The transaction was confirmed on-chain and the new pool is ready.
@@ -602,10 +630,9 @@ export function CreatePoolPage() {
           <div className="flex justify-center gap-3 flex-wrap">
             {createdPoolAddress && (
               <button
-                onClick={() => {
-                  setSuccess(false);
-                  navigate(`/dashbar/pool/${createdPoolAddress}`);
-                }}
+                onClick={() =>
+                  closeSuccessModal(`/dashbar/pool/${createdPoolAddress}`)
+                }
                 className="px-6 py-2.5 text-sm font-semibold rounded-lg bg-teal-700 text-white hover:bg-teal-600 transition-colors cursor-pointer"
               >
                 Open Pool
@@ -616,7 +643,7 @@ export function CreatePoolPage() {
                 href={`${((import.meta.env.VITE_BLOCK_EXPLORER_BASE as string) || "https://sepolia.etherscan.io").replace(/\/$/, "")}/address/${createdPoolAddress}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={() => setSuccess(false)}
+                onClick={() => closeSuccessModal(null)}
                 className="px-6 py-2.5 text-sm font-semibold rounded-lg bg-[#07182b] text-white hover:bg-teal-700 transition-colors cursor-pointer"
               >
                 View on Explorer

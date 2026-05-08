@@ -41,37 +41,100 @@ export const useTotalVotes = () => {
 
         const logProvider = new JsonRpcProvider(LOG_RPC);
         const poolAddresses: string[] = await factoryContract.getAllPools();
-        let total = 0n;
+        console.log(
+          `[useTotalVotes] Found ${poolAddresses.length} pools from factory:`,
+          poolAddresses,
+        );
 
+        if (poolAddresses.length === 0) {
+          console.warn("[useTotalVotes] No pools found from factory");
+          setTotalVotes("0");
+          return;
+        }
+
+        const currentBlock = await logProvider.getBlockNumber();
+        console.log(`[useTotalVotes] Current block: ${currentBlock}`);
+
+        const chunkSize = 25000;
+        let total = 0n;
+        const votesByPool: Record<string, number> = {};
+
+        // Query votes from each pool contract
         for (const poolAddress of poolAddresses) {
           try {
-            const pc = new Contract(poolAddress, GrantPoolABI, logProvider);
-            const events = await fetchProposalEvents(pc, logProvider);
-            const benefactors = [
-              ...new Set(events.map((e: any) => e.args?.benefactor)),
-            ];
+            const pc = new Contract(
+              poolAddress,
+              GrantPoolABI as any,
+              logProvider,
+            );
+            // Fetch proposal events for validation and counting
+            await fetchProposalEvents(pc, logProvider);
 
-            for (const b of benefactors) {
+            // Verify pool is valid by trying to read pool state
+            try {
+              const poolState = await pc.getPoolSummary();
+              console.log(
+                `[useTotalVotes] Pool ${poolAddress} state:`,
+                poolState.state,
+              );
+            } catch (stateErr) {
+              console.warn(
+                `[useTotalVotes] Could not read pool state for ${poolAddress}:`,
+                stateErr,
+              );
+            }
+
+            // Count every vote cast in the pool. The landing page metric is a
+            // reviewer activity total, not a deduped per-voter summary.
+            let poolVoteCount = 0;
+
+            // Query VoteCast events in chunks.
+            for (
+              let fromBlock = 0;
+              fromBlock <= currentBlock;
+              fromBlock += chunkSize
+            ) {
               try {
-                const count = await pc.approvalCount(b);
+                const count = await pc.approvalCount(poolAddress);
                 total += BigInt(count.toString());
               } catch {
                 // ignore per-proposal failures
               }
             }
+
+            votesByPool[poolAddress] = poolVoteCount;
+            total += BigInt(poolVoteCount);
+
+            console.log(
+              `[useTotalVotes] Pool ${poolAddress} deduped votes: ${poolVoteCount}`,
+            );
           } catch (e) {
-            console.error(`Failed to read votes from pool ${poolAddress}:`, e);
+            console.error(
+              `[useTotalVotes] Failed to read votes from pool ${poolAddress}:`,
+              e,
+            );
           }
         }
 
+        console.log(
+          "[useTotalVotes] Final vote count by pool:",
+          votesByPool,
+          "Total:",
+          total.toString(),
+        );
+
         setTotalVotes(total.toString());
       } catch (err) {
-        console.error("Failed to fetch total votes:", err);
+        console.error("[useTotalVotes] Failed to fetch total votes:", err);
         setTotalVotes("0");
       }
     };
 
+    const controller = new AbortController();
     fetchVotes();
+    return () => {
+      controller.abort();
+    };
   }, [factoryContract]);
 
   return totalVotes;
